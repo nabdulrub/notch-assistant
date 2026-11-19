@@ -8,6 +8,20 @@ import Foundation
 
 signal(SIGPIPE, SIG_IGN)
 
+// Asked by the session before it runs a command or starts a subagent: is a
+// worker being started on a model the user set? Exit 2 refuses the call and
+// gives the session the reason. Anything this cannot read goes ahead.
+if CommandLine.arguments.count > 2, CommandLine.arguments[1] == "hook" {
+    let event = (try? JSONSerialization.jsonObject(with: FileHandle.standardInput.readDataToEndOfFile())) as? [String: Any]
+    if CommandLine.arguments[2] == "pre-tool-use", let tool = event?["tool_name"] as? String,
+       let input = event?["tool_input"] as? [String: Any],
+       let reason = WorkerModelCheck.refusal(tool: tool, input: input, delegation: SettingsStore.standard.load().delegation) {
+        FileHandle.standardError.write(Data((reason + "\n").utf8))
+        exit(2)
+    }
+    exit(0)
+}
+
 func argument(_ flag: String) -> String? {
     let arguments = CommandLine.arguments
     guard let index = arguments.firstIndex(of: flag), arguments.count > index + 1 else { return nil }

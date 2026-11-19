@@ -208,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 enum SessionFiles {
     static var mcpConfig: URL { SettingsStore.standard.directory.appendingPathComponent("mcp.json") }
     static var persona: URL { SettingsStore.standard.directory.appendingPathComponent("persona.md") }
+    static var sessionSettings: URL { SettingsStore.standard.directory.appendingPathComponent("session-settings.json") }
 
     static var helperPath: String {
         let executable = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
@@ -220,10 +221,12 @@ enum SessionFiles {
         try? FileManager.default.createDirectory(at: SettingsStore.standard.directory, withIntermediateDirectories: true)
         try? data.write(to: mcpConfig, options: .atomic)
         try? Data(Persona.instructions(for: settings).utf8).write(to: persona, options: .atomic)
+        try? SessionCommand.sessionSettings(helperPath: helperPath).write(to: sessionSettings, options: .atomic)
     }
 
     static func session(settings: AssistantSettings) -> SessionCommand {
-        SessionCommand(assistantName: settings.assistantName, model: settings.model, mcpConfigPath: mcpConfig.path, personaPath: persona.path)
+        SessionCommand(assistantName: settings.assistantName, model: settings.model, mcpConfigPath: mcpConfig.path, personaPath: persona.path,
+                       settingsPath: sessionSettings.path)
     }
 
     /// `claude` and everything after it, one argument each.

@@ -273,12 +273,15 @@ public struct SessionCommand: Equatable, Sendable {
     public var model: String
     public var mcpConfigPath: String
     public var personaPath: String
+    /// Settings for this session alone: the check on what it starts.
+    public var settingsPath: String?
 
-    public init(assistantName: String, model: String, mcpConfigPath: String, personaPath: String) {
+    public init(assistantName: String, model: String, mcpConfigPath: String, personaPath: String, settingsPath: String? = nil) {
         self.assistantName = assistantName
         self.model = model
         self.mcpConfigPath = mcpConfigPath
         self.personaPath = personaPath
+        self.settingsPath = settingsPath
     }
 
     /// The session has to be interactive: that is what keeps it on the Claude
@@ -292,7 +295,7 @@ public struct SessionCommand: Equatable, Sendable {
             "--append-system-prompt-file", personaPath,
             "--dangerously-load-development-channels", "server:\(Persona.channelName)",
             "--allowedTools", "mcp__\(Persona.channelName)__speak,mcp__\(Persona.channelName)__show,mcp__\(Persona.channelName)__look",
-        ]
+        ] + (settingsPath.map { ["--settings", $0] } ?? [])
     }
 
     public var shellLine: String {
@@ -303,6 +306,21 @@ public struct SessionCommand: Equatable, Sendable {
         let safe = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:,=@")
         if !argument.isEmpty, argument.unicodeScalars.allSatisfy(safe.contains) { return argument }
         return "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Settings for the session alone. Before it runs a command or starts a
+    /// subagent, the helper is asked whether a worker is on a model the user set.
+    public static func sessionSettings(helperPath: String) -> Data {
+        let settings: [String: Any] = [
+            "hooks": [
+                "PreToolUse": [[
+                    "matcher": "Bash|Agent|Task",
+                    "hooks": [["type": "command", "command": quote(helperPath) + " hook pre-tool-use"]],
+                ]],
+            ],
+        ]
+        return (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]))
+            ?? Data("{}".utf8)
     }
 
     /// The MCP config that points Claude Code at the helper inside the app bundle.
