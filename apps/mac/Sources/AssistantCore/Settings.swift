@@ -31,15 +31,19 @@ public struct Delegation: Codable, Equatable, Sendable {
     public var maxWorkers: Int
     /// Whether it asks out loud before sending input to an agent it did not start.
     public var askBeforeTouchingOthers: Bool
+    /// Whether it talks a job through before starting it: asks what it needs to
+    /// know instead of deciding for the user. Off, it starts at once.
+    public var talksItThrough: Bool
 
     public init(style: Style = .always, runner: Runner = .auto, workerModel: String = "", lightWorkerModel: String = "",
-                maxWorkers: Int = 3, askBeforeTouchingOthers: Bool = true) {
+                maxWorkers: Int = 3, askBeforeTouchingOthers: Bool = true, talksItThrough: Bool = true) {
         self.style = style
         self.runner = runner
         self.workerModel = workerModel
         self.lightWorkerModel = lightWorkerModel
         self.maxWorkers = min(max(maxWorkers, 1), Self.mostWorkers)
         self.askBeforeTouchingOthers = askBeforeTouchingOthers
+        self.talksItThrough = talksItThrough
     }
 
     /// Like the settings as a whole, every field is optional on disk, and a
@@ -54,6 +58,7 @@ public struct Delegation: Codable, Equatable, Sendable {
         let most = (try? container.decodeIfPresent(Int.self, forKey: .maxWorkers)) ?? fallback.maxWorkers
         maxWorkers = min(max(most, 1), Self.mostWorkers)
         askBeforeTouchingOthers = (try? container.decodeIfPresent(Bool.self, forKey: .askBeforeTouchingOthers)) ?? fallback.askBeforeTouchingOthers
+        talksItThrough = (try? container.decodeIfPresent(Bool.self, forKey: .talksItThrough)) ?? fallback.talksItThrough
     }
 }
 

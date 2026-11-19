@@ -177,6 +177,12 @@ struct SettingsView: View {
                     }
                     .fixedSize()
                 }
+                row("Talk it through first", "Before it plans, builds or changes something, it asks what it needs to know. Off, it starts at once and tells you what it assumed.") {
+                    Toggle("Talk it through first", isOn: $model.draft.delegation.talksItThrough)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(.white.opacity(0.5))
+                }
                 row("Ask before touching other agents", "The ones it did not start. Off, it sends them input and tells you after.") {
                     Toggle("Ask before touching other agents", isOn: $model.draft.delegation.askBeforeTouchingOthers)
                         .labelsHidden()
