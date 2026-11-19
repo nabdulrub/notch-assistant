@@ -406,6 +406,8 @@ final class LiveConversation {
         case .utterance:
             // Typed in from the command line, for testing without a microphone.
             bridge.send(.utterance(message.text ?? "", source: "typed"))
+        case .nudge:
+            relay.lookNow()
         case .hello, .event, .permissionVerdict:
             break
         }

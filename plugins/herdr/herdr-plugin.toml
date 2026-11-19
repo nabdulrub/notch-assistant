@@ -1,0 +1,41 @@
+id = "notch-assistant"
+name = "Notch Assistant"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "A voice in the notch for your agents: starts with herdr, hears every status change, and takes the pane you hand it"
+platforms = ["macos"]
+
+# Opens the app when herdr starts. Only one copy ever runs, so this is safe to repeat.
+[[startup]]
+command = ["sh", "notch.sh", "start"]
+
+[[actions]]
+id = "open"
+title = "Open Notch Assistant"
+description = "Start the app in the notch if it is not running"
+contexts = ["global", "workspace"]
+command = ["sh", "notch.sh", "start"]
+
+[[actions]]
+id = "tell"
+title = "Hand this pane to the assistant"
+description = "Send the selected text, or the focused pane, to the assistant to look into"
+contexts = ["pane"]
+command = ["sh", "notch.sh", "tell"]
+
+[[actions]]
+id = "session"
+title = "Go to the assistant's session"
+description = "Focus the Claude Code session the assistant talks through"
+contexts = ["global", "workspace", "pane"]
+command = ["sh", "notch.sh", "session"]
+
+# The app looks at the agents once a second by itself. These make it look the
+# moment something changes, so a turn shorter than a second is not missed.
+[[events]]
+on = "pane.agent_status_changed"
+command = ["sh", "notch.sh", "nudge"]
+
+[[events]]
+on = "pane.agent_detected"
+command = ["sh", "notch.sh", "nudge"]

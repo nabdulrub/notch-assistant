@@ -265,3 +265,13 @@ import Testing
         #expect(server?["args"] as? [String] == ["--name", "Jarvis", "--socket", "/tmp/b.sock"])
     }
 }
+
+@Suite struct NudgeTests {
+    @Test func theLineTheHerdrPluginSendsIsUnderstood() {
+        #expect(BridgeMessage.decode(Data(#"{"type":"nudge"}"#.utf8)) == .nudge)
+    }
+
+    @Test func aNudgeNeverReachesTheSession() {
+        #expect(ChannelServer(assistantName: "Jarvis").notification(for: .nudge) == nil)
+    }
+}

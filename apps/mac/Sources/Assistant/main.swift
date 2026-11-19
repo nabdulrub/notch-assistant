@@ -87,6 +87,16 @@ if arguments.contains("--say") {
     exit(0)
 }
 
+/// `--nudge` tells the running app to look at the agents now. The herdr plugin
+/// does the same over the socket on every status change.
+if arguments.contains("--nudge") {
+    guard let descriptor = UnixSocket.connect(path: UnixSocket.standardPath) else { exit(1) }
+    let connection = LineConnection(descriptor: descriptor)
+    connection.send(BridgeMessage.nudge.encoded())
+    connection.close()
+    exit(0)
+}
+
 /// `--fleet` prints what herdr reports about the other agents, once.
 if arguments.contains("--fleet") {
     guard let agents = HerdrFeed.snapshot() else {

@@ -17,6 +17,7 @@ final class HerdrFeed: @unchecked Sendable {
 
     private let interval: TimeInterval
     private let ownName: String
+    private let wake = DispatchSemaphore(value: 0)
 
     init(ownName: String, interval: TimeInterval = 1) {
         self.ownName = ownName
@@ -30,6 +31,12 @@ final class HerdrFeed: @unchecked Sendable {
         defer { connection.close() }
         connection.send(Data(#"{"id":"list","method":"agent.list","params":{}}"#.utf8))
         return connection.nextLine().flatMap(AgentSnapshot.list(from:))
+    }
+
+    /// Asks again at once. The herdr plugin calls this on every status change, so a
+    /// turn shorter than the wait between two looks is still seen.
+    func lookNow() {
+        wake.signal()
     }
 
     func start() {
@@ -49,7 +56,7 @@ final class HerdrFeed: @unchecked Sendable {
                             MainActor.assumeIsolated { self?.onUpdate?(update) }
                         }
                     }
-                    Thread.sleep(forTimeInterval: interval)
+                    _ = wake.wait(timeout: .now() + interval)
                 }
                 connection.close()
                 Thread.sleep(forTimeInterval: 3)

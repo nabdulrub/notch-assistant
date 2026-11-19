@@ -75,6 +75,13 @@ session. You can open it again from the eyes icon in the menu bar.
 - Talk over it to interrupt. Say "bye" to send it back to sleep.
 - Opening the app twice by accident is fine. Only one copy ever runs.
 
+## The herdr plugin
+
+`plugins/herdr` is a [herdr](https://herdr.dev) plugin called `notch-assistant`.
+It opens the app when herdr starts, tells it the moment any agent changes state,
+and adds an action that hands the focused pane, or the text you selected in it,
+to the assistant. See [plugins/herdr](plugins/herdr/README.md).
+
 ## Build from source
 
 Needs Xcode 27 or the Swift 6.2 toolchain. There is no Xcode project.
@@ -100,6 +107,7 @@ apps/mac   the app (SwiftPM)
   Sources/AssistantChannel   the helper Claude Code runs to talk to the app
   Resources/sophon_bridge.py the bridge to the voice on this Mac
 apps/web   the landing page (plain HTML, CSS and one script)
+plugins/herdr   the herdr plugin (a manifest and one shell script)
 ```
 
 Settings, the key and the log live in `~/Library/Application Support/NotchAssistant`.

@@ -162,7 +162,7 @@ public struct ChannelServer: Sendable {
                 "request_id": requestId,
                 "behavior": allow ? "allow" : "deny",
             ])
-        case .hello, .speak, .show, .permissionRequest:
+        case .hello, .speak, .show, .permissionRequest, .nudge:
             return nil
         }
     }

@@ -19,6 +19,8 @@ public struct BridgeMessage: Codable, Equatable, Sendable {
         case event
         /// app -> helper: the user's answer to a permission prompt.
         case permissionVerdict
+        /// herdr plugin -> app: an agent just changed state, so look now and not at the next poll.
+        case nudge
     }
 
     public var type: Kind
@@ -48,6 +50,7 @@ public struct BridgeMessage: Codable, Equatable, Sendable {
     }
 
     public static let hello = BridgeMessage(type: .hello)
+    public static let nudge = BridgeMessage(type: .nudge)
 
     public static func speak(_ text: String, expectReply: Bool = false) -> BridgeMessage {
         BridgeMessage(type: .speak, text: text, expectReply: expectReply)

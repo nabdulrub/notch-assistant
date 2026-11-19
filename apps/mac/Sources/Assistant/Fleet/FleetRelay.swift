@@ -42,6 +42,10 @@ final class FleetRelay {
         feed.start()
     }
 
+    func lookNow() {
+        feed.lookNow()
+    }
+
     /// The user just heard something, so the next check-in can wait.
     func spoke() {
         if lastWorkerUpdate != nil { lastWorkerUpdate = Date() }
