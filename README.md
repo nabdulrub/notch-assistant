@@ -98,6 +98,11 @@ make web     # the landing page on localhost:4321
 `apps/mac/scripts/dist.sh` signs and notarizes when `SIGN_IDENTITY` and
 `NOTARY_PROFILE` are set; otherwise the image is signed ad hoc.
 
+## Contributing
+
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how changes get in, and
+[SECURITY.md](SECURITY.md) for reporting a security problem.
+
 ## Where things live
 
 ```
