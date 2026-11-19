@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notch Assistant: a voice in the notch for your coding agents</title>
+<meta name="description" content="Notch Assistant lives in the notch of your Mac. Say its name, ask out loud, and a Claude Code session on your own subscription does the work and tells you how it went.">
+<meta property="og:title" content="Notch Assistant">
+<meta property="og:description" content="A voice in the notch for your coding agents.">
+<meta property="og:image" content="assets/notch-speaking.png">
+<meta name="theme-color" content="#0b0b0d">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="styles.css">
+<script>document.documentElement.classList.add("js")</script>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-words">
+    <a class="mark" href="#top" aria-label="Notch Assistant">
+      <span class="mark-eyes" aria-hidden="true"><i></i><i></i></span>
+      Notch Assistant
+    </a>
+    <div class="hero-copy" id="top">
+      <h1><span class="line"><span>A voice in the notch</span></span> <span class="line"><span>for your coding agents.</span></span></h1>
+      <p class="lede rise">Notch Assistant lives at the top of your Mac. Say its name, ask out loud, and a Claude Code session on your own subscription does the work and tells you how it went.</p>
+      <p class="actions rise">
+        <a class="button" href="https://github.com/nabdulrub/notch-assistant/releases/latest">Download for Mac</a>
+        <a class="link" href="#how">See how it works</a>
+      </p>
+    </div>
+  </div>
+
+  <div class="hero-demo">
+    <a class="link top-link" href="https://github.com/nabdulrub/notch-assistant">GitHub</a>
+    <div class="demo">
+      <div class="screen" data-ui id="demo" data-state="awake">
+        <div class="island">
+          <div class="eyes" aria-hidden="true"><i></i><i></i></div>
+          <p class="caption" aria-live="polite"></p>
+          <div class="approval">
+            <p class="approval-title"><span data-name>Jarvis</span> wants to push the branch</p>
+            <p class="approval-command">git push origin landing-page</p>
+            <p class="approval-actions"><span>Say yes, or click</span><button type="button" data-answer="deny">Deny</button><button type="button" data-answer="allow" class="allow">Allow</button></p>
+          </div>
+        </div>
+      </div>
+      <form class="demo-controls" id="demo-controls">
+        <label for="name">It answers to</label>
+        <input id="name" name="name" value="Jarvis" maxlength="14" autocomplete="off" spellcheck="false">
+        <button class="button quiet" type="submit">Say &ldquo;<span data-name>Jarvis</span>&rdquo;</button>
+      </form>
+      <p class="demo-note">This is the real shape at its real size. The eyes follow your pointer, the way they do on the Mac.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section class="showcase" aria-labelledby="see">
+  <h2 id="see" class="reveal">What you see</h2>
+  <div class="state">
+    <p class="state-word">Listening</p>
+    <img src="assets/notch-listening.png" width="920" height="480" alt="The notch grown a little, two white eyes open, waiting for you to speak">
+    <p class="state-note">Say the name and the eyes open. They stay open while you talk.</p>
+  </div>
+  <div class="state">
+    <p class="state-word">Speaking</p>
+    <img src="assets/notch-speaking.png" width="920" height="480" loading="lazy" alt="The notch showing what it is saying: Two agents are still working. The reviewer finished with three notes.">
+    <p class="state-note">What it says is written under the eyes, so you can read along with the sound off.</p>
+  </div>
+  <div class="state">
+    <p class="state-word">Asking</p>
+    <img src="assets/notch-approval.png" width="920" height="480" loading="lazy" alt="The notch asking to push a branch, with the command and Deny and Allow buttons">
+    <p class="state-note">The command is right there. A push like this one waits for a click, not a spoken yes.</p>
+  </div>
+</section>
+
+<section class="how" id="how" aria-labelledby="how-title">
+  <h2 id="how-title" class="reveal">How it works</h2>
+  <div class="how-stage">
+    <div class="screen" data-ui id="stage" data-state="listening">
+      <div class="island">
+        <div class="eyes" aria-hidden="true"><i></i><i></i></div>
+        <p class="caption"></p>
+      </div>
+    </div>
+  </div>
+  <div class="how-words">
+    <div class="step" data-step="listening">
+      <h3>Say its name. It wakes up and listens.</h3>
+      <p>The name is heard on your Mac, and nothing leaves it until you have said it. Control Option Space does the same thing without a word.</p>
+      <div class="screen step-screen" data-ui data-state="listening"><div class="island"><div class="eyes" aria-hidden="true"><i></i><i></i></div><p class="caption">Listening</p></div></div>
+    </div>
+    <div class="step" data-step="working">
+      <h3>Then just ask. A voice model takes the turn.</h3>
+      <p>It knows when you are done, lets you cut in, and handles the hellos itself. Anything real it hands to Claude Code and gets out of the way.</p>
+      <div class="screen step-screen" data-ui data-state="working"><div class="island"><div class="eyes" aria-hidden="true"><i></i><i></i></div><p class="caption">Working on it</p></div></div>
+    </div>
+    <div class="step" data-step="speaking">
+      <h3>Claude Code does the work and reports back.</h3>
+      <p>An interactive session on your own subscription starts workers, watches every agent you have running in herdr, and tells you only what matters.</p>
+      <div class="screen step-screen" data-ui data-state="speaking"><div class="island"><div class="eyes" aria-hidden="true"><i></i><i></i></div><p class="caption">Two agents are still working. The reviewer finished with three notes.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="does" aria-labelledby="does-title">
+  <div class="sheet reveal">
+    <h2 id="does-title">What it does</h2>
+    <h3>Talking</h3>
+    <dl>
+      <div><dt>Wakes by name</dt><dd>On device</dd><dd class="note">Recognised on the Mac, so asleep means nothing is sent anywhere.</dd></div>
+      <div><dt>Talk key</dt><dd>Control Option Space</dd><dd class="note">For when the room is loud or you are on a call.</dd></div>
+      <div><dt>Lets you cut in</dt><dd>Full duplex</dd><dd class="note">Talk over it and it stops. It knows what you did not hear.</dd></div>
+      <div><dt>Hangs up by itself</dt><dd>15 seconds</dd><dd class="note">Say bye, or just go quiet.</dd></div>
+    </dl>
+    <h3>Working</h3>
+    <dl>
+      <div><dt>Hands the work over</dt><dd>Your plan</dd><dd class="note">It never does the job itself. A Claude Code session does.</dd></div>
+      <div><dt>Runs workers</dt><dd>Three at a time</dd><dd class="note">Starts agents in herdr and tells you who is on what.</dd></div>
+      <div><dt>Watches every agent</dt><dd>What matters</dd><dd class="note">Finished, stuck, or waiting on you. The rest stays quiet.</dd></div>
+      <div><dt>Asks before it acts</dt><dd>Voice or click</dd><dd class="note">The command shows in the notch and it asks out loud.</dd></div>
+    </dl>
+    <h3>Yours</h3>
+    <dl>
+      <div><dt>Its name</dt><dd>Jarvis by default</dd><dd class="note">Setup asks what it should answer to.</dd></div>
+      <div><dt>Its memory</dt><dd>Local</dd><dd class="note">One settings file on your Mac. No database, no account with us.</dd></div>
+      <div><dt>One copy</dt><dd>Always</dd><dd class="note">Open it twice by accident and the second one leaves.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="costs" aria-labelledby="costs-title">
+  <div class="costs-head">
+    <h2 id="costs-title" class="reveal">What it costs</h2>
+    <img class="reveal" src="assets/setup-voice.png" width="1080" height="1220" loading="lazy" alt="The setup screen asking how you want to talk: Live, with your own OpenAI key, or On this Mac">
+  </div>
+  <div class="costs-list">
+    <div class="reveal">
+      <h3>The app</h3>
+      <dl>
+        <div><dt>Notch Assistant</dt><dd>Free</dd><dd class="note">The app itself. No account with us, no server of ours.</dd></div>
+        <div><dt>Claude Code</dt><dd>Your plan</dd><dd class="note">The work runs in an interactive session on the plan you already have, never the API.</dd></div>
+      </dl>
+    </div>
+    <div class="reveal">
+      <h3>The voice, pick one</h3>
+      <dl>
+        <div><dt>Live</dt><dd>Your key</dd><dd class="note">OpenAI's voice model on your own API key. OpenAI bills you by the minute connected, and it hangs up when you go quiet.</dd></div>
+        <div><dt>On this Mac</dt><dd>Free</dd><dd class="note">Sophon, an open model. No key, nothing leaves the Mac. A 9 GB download and 16 GB of memory or more. Experimental.</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="asked" aria-labelledby="asked-title">
+  <h2 id="asked-title" class="reveal">Good to know</h2>
+  <div class="answers reveal">
+    <p><strong>Does it send my audio anywhere?</strong> Asleep, no. The name is recognised on your Mac. Awake, audio goes to the voice you picked: OpenAI with the live voice, nowhere at all with the voice on this Mac.</p>
+    <p><strong>Do I need an OpenAI key?</strong> Only for the live voice, and it is always your own. The app ships with none. Pick the voice on this Mac and you need no key.</p>
+    <p><strong>Does it use the Claude API?</strong> No. It talks to an interactive Claude Code session, so the work runs on your Claude subscription.</p>
+    <p><strong>What is herdr?</strong> A terminal multiplexer for coding agents. With it, the assistant sees every agent you have running and starts its own workers there.</p>
+    <p><strong>Can it run things without asking?</strong> When Claude Code needs permission, the notch opens with the command and it asks you out loud. You answer, or you click.</p>
+    <p><strong>Can I call it something else?</strong> Yes. Jarvis is only the default.</p>
+    <p><strong>Which Macs?</strong> Apple silicon on macOS 26 or later. It is built for MacBooks with a notch.</p>
+    <p><strong>How good is the voice on this Mac?</strong> It answers in about a second and hands work over reliably. It is a small model, so it is worse than the live voice at ignoring people talking nearby.</p>
+    <p><strong>Is it signed by Apple?</strong> Not yet. The first time, macOS needs one Terminal line to open it. The read-me in the disk image has it.</p>
+  </div>
+</section>
+
+<section class="close" aria-labelledby="close-title">
+  <div class="dusk reveal">
+    <div class="screen bare" data-ui data-state="awake">
+      <div class="island"><div class="eyes" aria-hidden="true"><i></i><i></i></div><p class="caption"></p></div>
+    </div>
+    <div class="dusk-words">
+      <h2 id="close-title">Get it</h2>
+      <p>Put a pair of eyes in your notch, say hello, and stop typing into panes.</p>
+      <p class="actions"><a class="button dark" href="https://github.com/nabdulrub/notch-assistant/releases/latest">Download for Mac</a><a class="link" href="https://github.com/nabdulrub/notch-assistant">Read the source</a></p>
+    </div>
+    <img src="assets/icon.png" width="256" height="256" loading="lazy" alt="The Notch Assistant icon: two white eyes on black">
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>A voice for your agents</p>
+  <p class="foot-links"><a href="https://github.com/nabdulrub/notch-assistant">GitHub</a><a href="https://github.com/nabdulrub/notch-assistant/releases">Releases</a><a href="https://github.com/adventists-ai/sophon-realtime">Sophon</a></p>
+  <p class="foot-year">2026</p>
+</footer>
+
+<script src="notch.js" defer></script>
+</body>
+</html>
