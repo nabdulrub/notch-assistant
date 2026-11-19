@@ -90,7 +90,7 @@ public struct ChannelServer: Sendable {
             }
             let words = text.split(whereSeparator: { $0 == " " || $0 == "\n" }).count
             if words > ChannelServer.wordLimit {
-                output.replies.append(toolResult(id, "Not said: that is \(words) words, which sounds like reading out a report. Say only the one thing that matters, in under \(ChannelServer.wordLimit) words, the way you would tell a friend. Drop the rest; they will ask if they want it. Do not split it across several speak calls.", isError: true))
+                output.replies.append(toolResult(id, "Not said: that is \(words) words, which is a summary, not talk. This is a conversation: say only the one thing they most want to know, in under \(ChannelServer.wordLimit) words, the way you would say it to a friend across the desk, and stop. Leave out numbers, names and steps they did not ask for; they will ask if they want them. Do not split it across several speak calls.", isError: true))
                 return
             }
             output.toApp.append(.speak(text, expectReply: arguments["expect_reply"] as? Bool ?? false))
@@ -128,13 +128,13 @@ public struct ChannelServer: Sendable {
     }
 
     /// A reply longer than this is a report, not talk.
-    public static let wordLimit = 36
+    public static let wordLimit = 24
 
     static let tools: [[String: Any]] = [
         [
             "name": "speak",
             "_meta": ["anthropic/alwaysLoad": true],
-            "description": "Say something out loud to the user. This is the only way the user hears you. Talk like a friend across the desk, not an assistant: casual, contractions, a filler here and there. Give the one thing that matters and stop, so they can ask for more. At most \(ChannelServer.wordLimit) words, always: there is no way around the limit. If there is more to tell, say the headline and offer the rest. No markdown, lists, code or emoji. Returns as soon as speech starts.",
+            "description": "Say something out loud to the user. This is the only way the user hears you. You are in a conversation with a friend, not giving a briefing: casual, contractions, a filler here and there. Say one thing, the one they most want to know, and stop so they can answer or ask for more. Never a summary of everything you know. At most \(ChannelServer.wordLimit) words, always: there is no way around the limit. If there is more to tell, say the headline and offer the rest. No markdown, lists, code or emoji. Returns as soon as speech starts.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
