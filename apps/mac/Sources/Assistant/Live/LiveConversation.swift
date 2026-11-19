@@ -79,6 +79,7 @@ final class LiveConversation {
     func start() {
         bridge.onMessage = { [weak self] message in self?.received(message) }
         bridge.onSessionCount = { count in Log.write(count > 0 ? "session attached" : "session detached") }
+        model.onDismiss = { [weak self] in self?.dismiss(how: "a click on the notch") }
         model.onApproval = { [weak self] request, allow in self?.decide(request, allow: allow, how: "click") }
 
         relay.onSummary = { [weak self] summary in
@@ -321,6 +322,18 @@ final class LiveConversation {
         if quiet > settings.liveIdle, now.timeIntervalSince(lastWords) > 1.5 || quiet > settings.liveIdle + Self.longestWait {
             sleep("quiet for \(Int(now.timeIntervalSince(lastEngaged)))s")
         }
+    }
+
+    /// Sends it back to sleep without a word: a click on the notch, or the menu.
+    /// Saying bye depends on the voice model catching it, and this does not.
+    func dismiss(how: String) {
+        guard state != .asleep else { return }
+        if player.isPlaying {
+            session?.interrupt()
+            player.flush()
+            dialogue.markCutOff()
+        }
+        sleep("sent away with \(how)")
     }
 
     private func talkKey() {

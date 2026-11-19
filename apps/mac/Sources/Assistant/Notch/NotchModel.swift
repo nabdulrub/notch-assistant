@@ -25,6 +25,8 @@ final class NotchModel: ObservableObject {
     /// Centre of the eyes in screen coordinates, so they can follow the pointer.
     var anchor: CGPoint = .zero
     var onApproval: ((ApprovalRequest, Bool) -> Void)?
+    /// A click on the island while it is awake sends it back to sleep.
+    var onDismiss: (() -> Void)?
 
     init(assistantName: String) {
         self.assistantName = assistantName
@@ -36,6 +38,13 @@ final class NotchModel: ObservableObject {
 
     var size: IslandSize {
         NotchLayout.size(metrics: metrics, content: content)
+    }
+
+    /// Not while it is asking for a yes or a no: a stray click there must never
+    /// count as an answer, or lose the question.
+    func dismiss() {
+        guard approval == nil, phase.isAwake else { return }
+        onDismiss?()
     }
 
     func resolve(_ request: ApprovalRequest, allow: Bool) {
