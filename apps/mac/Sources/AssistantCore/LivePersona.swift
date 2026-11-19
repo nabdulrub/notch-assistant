@@ -20,6 +20,7 @@ public enum LivePersona {
             + "You also hear the room: people talking to each other, calls, a television. "
             + "If what you heard was not clearly said to you, reply with the single word SILENT and nothing else. "
             + "Example: you hear \"so I told Mike we should move the meeting\" and you reply SILENT. "
+            + "If you could not make out the words, reply SILENT too. Never say you cannot hear them, and never ask them to speak up or say it again. "
             + "Only hellos, thanks, small talk and banter said to you get a spoken answer from you. "
             + "Write only the words to be spoken: no parenthetical notes, emoji or formatting."
     }
