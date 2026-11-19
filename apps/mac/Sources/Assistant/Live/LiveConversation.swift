@@ -34,6 +34,10 @@ final class LiveConversation {
     /// How much of the dialogue the session has already been given.
     private var handedOver = 0
     private var openHandOff: String?
+    /// Set from the moment a request is handed over until the session has dealt
+    /// with it, so the silence in between can be filled.
+    private var wait: HandOffWait?
+    private var waitingLines = WaitingLines()
     private var waitingToSay: [String] = []
     /// When it last spoke, was handed something, or was given something to say.
     private var lastEngaged = Date()
@@ -91,6 +95,7 @@ final class LiveConversation {
             if !busy {
                 self.note = nil
                 self.openHandOff = nil
+                self.wait = nil
             }
             self.refresh()
         }
@@ -151,7 +156,10 @@ final class LiveConversation {
         }
 
         idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkIdle() }
+            MainActor.assumeIsolated {
+                self?.checkWaiting()
+                self?.checkIdle()
+            }
         }
 
         Task { @MainActor in
@@ -209,7 +217,8 @@ final class LiveConversation {
             self.logFinishedLines()
             self.lastWords = Date()
             if let said = self.dialogue.latest(.user)?.text, Dismissal.matches(said) {
-                self.sleep("told to stop")
+                self.wait = nil
+            self.sleep("told to stop")
                 return
             }
             self.collectAnswer(text)
@@ -220,6 +229,7 @@ final class LiveConversation {
             self.dialogue.append(.voice, text)
             self.logFinishedLines()
             self.lastEngaged = Date()
+            self.wait?.heard(at: Date())
             self.relay.spoke()
             self.refresh()
         }
@@ -227,6 +237,7 @@ final class LiveConversation {
             guard let self, self.session === session else { return }
             self.openHandOff = id
             self.lastEngaged = Date()
+            self.acknowledge(id, on: session)
             self.refresh()
             // The hand-off carries no words, and the transcript trails the audio.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
@@ -323,6 +334,39 @@ final class LiveConversation {
         }
     }
 
+    /// The moment a request is handed over, the user hears that it was taken. A
+    /// voice that retells what it is given says so itself; one that speaks word
+    /// for word hands over without a sound, so the line is given to it.
+    private func acknowledge(_ id: String, on session: VoiceLine?) {
+        let now = Date()
+        wait = HandOffWait(at: now)
+        guard let session, session.speaksWordForWord else { return }
+        // It may have said something of its own on the way to the hand-off.
+        if player.isPlaying || now.timeIntervalSince(lastPlayedAt) < 1.5 { return }
+        let line = waitingLines.acknowledgement()
+        Log.write("acknowledging: \(line)")
+        session.say(line, handOff: id)
+    }
+
+    /// While the session is still on a request and the user has heard nothing
+    /// for a while, say that the work is still going. Never over the user, and
+    /// never while it is waiting for a yes or a no.
+    private func checkWaiting() {
+        guard var waiting = wait else { return }
+        let now = Date()
+        if player.isPlaying {
+            waiting.heard(at: now)
+            wait = waiting
+            return
+        }
+        guard model.approval == nil, !userTalking, now.timeIntervalSince(lastWords) > 2, waiting.updateDue(at: now) else { return }
+        let line = WaitingLines.stillWorking(waiting.updates)
+        waiting.updated(at: now)
+        wait = waiting
+        Log.write("still waiting on the session: \(line)")
+        say(line)
+    }
+
     private func talkKey() {
         switch state {
         case .asleep:
@@ -369,6 +413,7 @@ final class LiveConversation {
         let message = "The voice handed this to you. What has been said since you were last asked:\n\(said)"
         if !bridge.send(.utterance(message, source: "voice")) {
             Log.write("no session attached")
+            wait = nil
             session?.say(session?.speaksWordForWord == true
                 ? "I'm not hooked up to a Claude session right now."
                 : "Tell them you are not hooked up to a Claude session right now.", handOff: id)
@@ -382,6 +427,9 @@ final class LiveConversation {
             guard !text.isEmpty else { return }
             Log.write("to say: \(text)")
             relay.spoke()
+            // Mid-turn this is an update and the wait goes on. Where the session
+            // cannot be seen working, its first word is taken as the answer.
+            if sessionBusy { wait?.heard(at: Date()) } else { wait = nil }
             say(text)
         case .show:
             let title = (message.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
