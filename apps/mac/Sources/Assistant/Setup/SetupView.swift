@@ -188,11 +188,7 @@ struct SetupView: View {
         }
     }
 
-    private var field: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.07))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
-    }
+    private var field: some View { FieldBackground() }
 
     private func choice(_ engine: String, title: String, detail: String) -> some View {
         let selected = model.engine == engine
@@ -326,7 +322,7 @@ struct QuietButton: ButtonStyle {
 }
 
 /// The blurred desktop behind the window.
-private struct WindowGlass: NSViewRepresentable {
+struct WindowGlass: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = .hudWindow
