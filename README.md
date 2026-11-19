@@ -80,7 +80,8 @@ session. You can open it again from the eyes icon in the menu bar.
 `plugins/herdr` is a [herdr](https://herdr.dev) plugin called `notch-assistant`.
 It opens the app when herdr starts, tells it the moment any agent changes state,
 and adds an action that hands the focused pane, or the text you selected in it,
-to the assistant. See [plugins/herdr](plugins/herdr/README.md).
+to the assistant. Install it with `herdr plugin install nabdulrub/notch-assistant/plugins/herdr`.
+See [plugins/herdr](plugins/herdr/README.md).
 
 ## Build from source
 
@@ -116,3 +117,9 @@ plugins/herdr   the herdr plugin (a manifest and one shell script)
 ```
 
 Settings, the key and the log live in `~/Library/Application Support/NotchAssistant`.
+
+## License
+
+MIT. See [LICENSE](LICENSE). The bridge to the voice on this Mac includes code
+adapted from Sophon-Realtime under the Apache License 2.0; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

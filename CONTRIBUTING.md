@@ -45,6 +45,11 @@ tests look. If you fix a bug there, add the test that would have caught it.
 - In the app and on the page: no emoji, plain words, and one shape that changes rather than several that appear.
 - Commit titles follow Conventional Commits: `feat:`, `fix:`, `docs:`, `chore:`.
 
+## Licence
+
+The project is under the MIT License. By opening a pull request you agree that
+your contribution is released under it too.
+
 ## Security
 
 Please do not open a public issue for a security problem. See [SECURITY.md](SECURITY.md).
