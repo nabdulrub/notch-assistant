@@ -12,11 +12,13 @@ With it:
 
 ## Install
 
-While the plugin lives in this repository, link it from a checkout:
-
 ```sh
-herdr plugin link /path/to/notch-assistant/plugins/herdr
+herdr plugin install nabdulrub/notch-assistant/plugins/herdr
 ```
+
+You also need the app itself: [download it](https://github.com/nabdulrub/notch-assistant/releases/latest)
+and drag it to Applications. Working on the plugin from a checkout? Link it
+instead with `herdr plugin link /path/to/notch-assistant/plugins/herdr`.
 
 The app is looked for in `/Applications`, then `~/Applications`, then a build
 next to the plugin. Set `NOTCH_ASSISTANT_APP` to point somewhere else.

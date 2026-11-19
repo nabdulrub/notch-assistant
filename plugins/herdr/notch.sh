@@ -38,7 +38,7 @@ case "${1:-}" in
     if app=$(app_binary); then
       /usr/bin/open -g "$app"
     else
-      echo "Notch Assistant is not installed. Put it in /Applications, or set NOTCH_ASSISTANT_APP." >&2
+      echo "Notch Assistant is not installed. Get it from https://github.com/nabdulrub/notch-assistant/releases/latest and put it in /Applications, or set NOTCH_ASSISTANT_APP." >&2
       exit 1
     fi
     ;;
