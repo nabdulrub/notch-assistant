@@ -27,7 +27,7 @@ with that install's own Python. JarvisBrain.reply and JarvisBrain._talk follow B
 (Copyright 2026 Adventists.ai, Apache License 2.0), changed so that a reply can be recognised as a hand-off before any
 of it is spoken, and so that given text can be spoken without the model writing it.
 """
-import argparse, asyncio, collections, json, os, sys, threading, time, uuid
+import argparse, asyncio, collections, json, os, re, sys, threading, time, uuid
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--app", required=True, help="the folder that holds Sophon's engine.py")
@@ -57,6 +57,20 @@ def control(text):
     return "handoff" if t.startswith(HANDOFF) else "goodbye" if t.startswith(GOODBYE) else "silent" if t.startswith(SILENT) else None
 
 
+# The model saying it could not hear, in the ways it says it. It hears the whole room, and a small model
+# answers talk it cannot make out with this instead of staying out of it.
+UNHEARD = re.compile(
+    r"\b(?:can(?:no|')?t|could ?n[o']t|did ?n[o']t|unable to|not sure i|having trouble|hard to)\b[^.?!]{0,24}"
+    r"\b(?:hear|hearing|catch|make out|got that|get that|understand you)\b"
+    r"|\bspeak up\b|\bspeak (?:a little |a bit )?louder\b|\b(?:say|repeat) that again\b")
+UNHEARD_LEAD = 48             # characters of a reply read before it is spoken, to tell
+
+
+def unheard(text):
+    """Whether a reply is the model asking to be spoken to more clearly. Such a reply is never worth saying."""
+    return bool(UNHEARD.search(text.lower().replace("\u2019", "'")))
+
+
 def request_of(text):
     """What was asked for, out of 'HANDOFF: check how the release is going.'"""
     t = text[text.upper().find(HANDOFF) + len(HANDOFF):]
@@ -81,8 +95,9 @@ class JarvisBrain(Brain):
         self._prefill(ids, E, sig, len(ids) - 1)
         gen = stream_generate(self.lm, self.tok, mx.array(ids[-1:]), input_embeddings=E[-1:], prompt_cache=self.cache, max_tokens=max_tok,
                               sampler=make_sampler(temp=0.4, top_p=0.9))
-        st = {"raw": "", "clean": "", "sent": 0, "buf": [], "done": False, "closed": False, "spoken": False, "shown": "", "ntok": 0, "calls": 0}
-        t0 = time.time(); self.timing = {}
+        st = {"raw": "", "clean": "", "sent": 0, "buf": [], "done": False, "closed": False, "spoken": False, "opened": False, "shown": "", "ntok": 0,
+              "calls": 0}
+        t0 = time.time(); self.timing = {}; self.dropped = None
 
         def pull():
             fin = False
@@ -94,7 +109,7 @@ class JarvisBrain(Brain):
             txt = tag_clean(st["raw"], fin).lstrip(); st["clean"] = txt
             if not st["closed"]:
                 # Once it is talking, a hand-off that turns up mid-reply ends the spoken part there.
-                at = txt.upper().find(HANDOFF) if st["spoken"] else -1
+                at = txt.upper().find(HANDOFF) if st["spoken"] or st["opened"] else -1
                 say = txt if at < 0 else txt[:at]
                 tid = self.tok.encode(say, add_special_tokens=False) if say else []
                 stable = tid if fin or at >= 0 else tid[:-1]
@@ -110,6 +125,15 @@ class JarvisBrain(Brain):
             while not st["done"] and not cancelled(): pull()
             self.sig += [("gen", i) for i in range(st["ntok"])]
             return st["clean"] or st["raw"], None
+        # A little more of it before a word is spoken: a reply that says it could not hear is dropped, and
+        # goes down as having stayed out of it.
+        st["opened"] = True
+        while not st["done"] and len(st["raw"].strip()) < UNHEARD_LEAD and not cancelled(): pull()
+        if not said and unheard(st["clean"] or st["raw"]):
+            while not st["done"] and not cancelled(): pull()
+            self.sig += [("gen", i) for i in range(st["ntok"])]
+            self.dropped = st["clean"] or st["raw"]
+            return SILENT, None
         st["spoken"] = True
         while not st["done"] and len(st["buf"]) < LEAD:
             if cancelled(): break
@@ -212,6 +236,7 @@ class JarvisSession(Session):
         text, a24 = self.b.reply(self.history, (r["ukey"], r["user"]), self._emit(r), lambda: r["cancel"],
                                  on_text=lambda t: None if r["cancel"] else self.note({"type": "voice_text", "text": t}))
         handed = HANDOFF in text.upper(); kind = control(text) or ("handoff" if handed else None)
+        if self.b.dropped and not r["cancel"]: self.note({"type": "unheard", "text": self.b.dropped})
         r["text"] = text; r["a16"] = resample(a24, 24000, SR) if a24 is not None else None; r["done"] = True
         with self.lock:
             if not r["cancel"]:
