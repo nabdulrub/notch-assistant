@@ -7,7 +7,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="${APP_NAME:-Jarvis}"
+APP_NAME="${APP_NAME:-Notch Assistant}"
 CONFIG="${CONFIG:-release}"
 BUILD="$ROOT/build"
 APP="$BUILD/$APP_NAME.app"

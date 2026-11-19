@@ -10,7 +10,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="${APP_NAME:-Jarvis}"
+APP_NAME="${APP_NAME:-Notch Assistant}"
 APP="$ROOT/build/$APP_NAME.app"
 DIST="$ROOT/dist"
 BUNDLE_ID="com.naderabdulrub.notchassistant"
@@ -18,14 +18,14 @@ BUNDLE_ID="com.naderabdulrub.notchassistant"
 cd "$ROOT"
 CONFIG=release APP_NAME="$APP_NAME" "$ROOT/scripts/bundle.sh"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-DMG="$DIST/$APP_NAME-$VERSION.dmg"
+DMG="$DIST/${APP_NAME// /}-$VERSION.dmg"
 
 SIGNED=no
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
     --identifier "$BUNDLE_ID.channel" "$APP/Contents/MacOS/assistant-channel"
   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
-    --identifier "$BUNDLE_ID" --entitlements "$ROOT/Resources/Jarvis.entitlements" "$APP"
+    --identifier "$BUNDLE_ID" --entitlements "$ROOT/Resources/NotchAssistant.entitlements" "$APP"
   SIGNED=yes
 fi
 
@@ -38,8 +38,9 @@ ln -s /Applications "$STAGE/Applications"
   echo "You need"
   echo "  - an Apple Silicon Mac on macOS 26 or later"
   echo "  - Claude Code, installed and signed in"
-  echo "  - an OpenAI API key that can use gpt-live-1, or no key at all if you pick"
-  echo "    \"On this Mac\" during setup"
+  echo "  - for the live voice, your own OpenAI API key that can use gpt-live-1"
+  echo "  - or no key at all: pick \"On this Mac\" during setup and install the"
+  echo "    open Sophon model it points you to (16 GB of memory or more)"
   echo
   echo "Install"
   echo "  1. Drag $APP_NAME onto Applications."
@@ -49,12 +50,12 @@ ln -s /Applications "$STAGE/Applications"
     echo "  2. This build is not signed with Apple yet, so macOS will not open it"
     echo "     by double-click the first time. Open Terminal and run:"
     echo
-    echo "       xattr -dr com.apple.quarantine /Applications/$APP_NAME.app && open /Applications/$APP_NAME.app"
+    echo "       xattr -dr com.apple.quarantine \"/Applications/$APP_NAME.app\" && open \"/Applications/$APP_NAME.app\""
     echo
     echo "  3. Setup starts by itself and walks you through the rest."
   fi
   echo
-  echo "After that, say its name and talk. Setup and Quit are under the eyes icon"
+  echo "After that, say its name (Jarvis, unless you changed it) and talk. Setup and Quit are under the eyes icon"
   echo "in the menu bar."
 } > "$STAGE/Read me.txt"
 
