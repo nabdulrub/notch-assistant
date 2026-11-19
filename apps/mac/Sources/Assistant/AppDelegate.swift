@@ -67,6 +67,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         conversation?.dismiss(how: "the menu")
     }
 
+    /// Opens the system's own picker, where Voice Isolation takes keys, fans
+    /// and the room out of what the microphone hears. Only the user can set it.
+    @objc private func showMicrophoneModes() {
+        Log.write("microphone mode: \(Ears.microphoneMode), opening the system picker")
+        AVCaptureDevice.showSystemUserInterface(.microphoneModes)
+    }
+
     @objc private func showSettings() {
         guard setup == nil else { return }
         if let settingsWindow { return settingsWindow.show() }
@@ -192,6 +199,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let settingsItem = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
             settingsItem.target = self
             menu.addItem(settingsItem)
+            let micItem = NSMenuItem(title: "Microphone Mode\u{2026}", action: #selector(showMicrophoneModes), keyEquivalent: "")
+            micItem.target = self
+            menu.addItem(micItem)
             let setupItem = NSMenuItem(title: "Run Setup Again\u{2026}", action: #selector(showSetup), keyEquivalent: "")
             setupItem.target = self
             menu.addItem(setupItem)

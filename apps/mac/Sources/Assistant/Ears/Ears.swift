@@ -150,6 +150,16 @@ final class Ears: @unchecked Sendable {
         }
     }
 
+    /// The microphone mode the user picked for this app in Control Centre.
+    static var microphoneMode: String {
+        switch AVCaptureDevice.preferredMicrophoneMode {
+        case .voiceIsolation: return "voice isolation"
+        case .wideSpectrum: return "wide spectrum"
+        case .standard: return "standard"
+        @unknown default: return "unknown"
+        }
+    }
+
     @MainActor
     private func startEngine() throws {
         try startEngine(echoCancel: wantsEchoCancel)
@@ -177,7 +187,7 @@ final class Ears: @unchecked Sendable {
         cancelsEcho = input.isVoiceProcessingEnabled
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw SetupError.noInput }
-        Log.write("microphone: \(Int(format.sampleRate)) Hz, \(format.channelCount) ch, echo cancel \(cancelsEcho ? "on" : "off")")
+        Log.write("microphone: \(Int(format.sampleRate)) Hz, \(format.channelCount) ch, echo cancel \(cancelsEcho ? "on" : "off"), mode \(Ears.microphoneMode)")
         // Only the first channel is used: with voice processing on, the input can
         // arrive with extra channels that no converter will mix down.
         let mono = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: 1, interleaved: false)
