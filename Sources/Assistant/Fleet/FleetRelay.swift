@@ -74,8 +74,9 @@ final class FleetRelay {
             pending.append(event)
         }
         guard timer == nil else { return }
-        // Its own workers are what the user is waiting on; those go out quickly.
-        let wait: TimeInterval = pending.contains { $0.agent.isOwn } ? 1.5 : 8
+        // Its own workers, and agents it asked something, are what the user is
+        // waiting on; those go out quickly.
+        let wait: TimeInterval = pending.contains { $0.agent.isOwn || $0.asked } ? 1.5 : 8
         timer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.flush() }
         }
@@ -88,7 +89,8 @@ final class FleetRelay {
         guard !events.isEmpty else { return }
         let lines = events.map { event -> String in
             let project = event.agent.directory.map { ", in " + ($0 as NSString).lastPathComponent } ?? ""
-            return "- \(event.text) (pane \(event.agent.paneID), \(event.agent.isOwn ? "your worker" : "not yours")\(project))"
+            let whose = event.agent.isOwn ? "your worker" : event.asked ? "not yours, but you prompted it and this is its answer" : "not yours"
+            return "- \(event.text) (pane \(event.agent.paneID), \(whose)\(project))"
         }
         onNote?("Checking in on the agents")
         send?(.event(kind: "agents", text: lines.joined(separator: "\n"), meta: ["count": String(events.count)]))

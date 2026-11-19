@@ -121,3 +121,38 @@ import Testing
         #expect(try JSONDecoder().decode(AssistantSettings.self, from: Data("{}".utf8)).assistantName == "Jarvis")
     }
 }
+
+@Suite struct FleetTrackerTests {
+    private func agent(_ pane: String, _ name: String, _ status: AgentSnapshot.Status) -> AgentSnapshot {
+        AgentSnapshot(paneID: pane, name: name, title: nil, status: status, directory: nil)
+    }
+
+    @Test func aQuickAnswerFromAnAgentTheOrchestratorPromptedIsReported() {
+        var tracker = FleetTracker(ownName: "jarvis")
+        let start = Date()
+        _ = tracker.update([agent("p1", "jarvis", .working), agent("p2", "margo", .idle)], now: start)
+        _ = tracker.update([agent("p1", "jarvis", .working), agent("p2", "margo", .working)], now: start + 1)
+        let update = tracker.update([agent("p1", "jarvis", .idle), agent("p2", "margo", .idle)], now: start + 6)
+        #expect(update.events.map(\.kind) == [.finished])
+        #expect(update.events.first?.asked == true)
+    }
+
+    @Test func aQuickTurnNobodyAskedForIsStillLeftOut() {
+        var tracker = FleetTracker(ownName: "jarvis")
+        let start = Date()
+        _ = tracker.update([agent("p1", "jarvis", .idle), agent("p2", "margo", .idle)], now: start)
+        _ = tracker.update([agent("p1", "jarvis", .idle), agent("p2", "margo", .working)], now: start + 1)
+        let update = tracker.update([agent("p1", "jarvis", .idle), agent("p2", "margo", .done)], now: start + 6)
+        #expect(update.events.isEmpty)
+    }
+
+    @Test func aLongTurnNobodyWatchedIsReported() {
+        var tracker = FleetTracker(ownName: "jarvis")
+        let start = Date()
+        _ = tracker.update([agent("p2", "margo", .idle)], now: start)
+        _ = tracker.update([agent("p2", "margo", .working)], now: start + 1)
+        let update = tracker.update([agent("p2", "margo", .done)], now: start + 40)
+        #expect(update.events.map(\.kind) == [.finished])
+        #expect(update.events.first?.asked == false)
+    }
+}

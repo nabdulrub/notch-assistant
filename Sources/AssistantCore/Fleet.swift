@@ -57,6 +57,8 @@ public struct FleetEvent: Equatable, Sendable {
 
     public var kind: Kind
     public var agent: AgentSnapshot
+    /// The orchestrator set this agent going itself, so it is waiting on the answer.
+    public var asked = false
 
     public var text: String {
         switch kind {
@@ -66,7 +68,7 @@ public struct FleetEvent: Equatable, Sendable {
     }
 
     public var meta: [String: String] {
-        var meta = ["status": kind.rawValue, "pane_id": agent.paneID, "own": agent.isOwn ? "yes" : "no"]
+        var meta = ["status": kind.rawValue, "pane_id": agent.paneID, "own": agent.isOwn ? "yes" : "no", "asked": asked ? "yes" : "no"]
         if let name = agent.name { meta["agent"] = name }
         if let directory = agent.directory { meta["project"] = (directory as NSString).lastPathComponent }
         return meta
@@ -89,7 +91,8 @@ public struct FleetUpdate: Equatable, Sendable {
 /// Every agent's blocks and finished turns are passed on, and the orchestrator
 /// decides which of them the user needs to hear. Two things are left out because
 /// they are never news: turns the user was watching, and turns too short to be a
-/// job.
+/// job. Neither is left out for an agent the orchestrator prompted itself: it
+/// asked, so it is told the moment there is an answer, however quick.
 public struct FleetTracker: Sendable {
     public static let ownPrefix = "jv-"
 
@@ -98,6 +101,13 @@ public struct FleetTracker: Sendable {
 
     private var known: [String: AgentSnapshot.Status] = [:]
     private var workingSince: [String: Date] = [:]
+    /// Agents that started a turn while the orchestrator was in the middle of
+    /// its own, which is when it prompts them.
+    private var asked: Set<String> = []
+    private var ownWorkedAt = Date.distantPast
+    /// An agent takes a moment to show as working after it is prompted, and by
+    /// then the orchestrator's own turn may just have ended.
+    public static let askedWithin: TimeInterval = 4
     private var primed = false
     private let ownName: String
 
@@ -112,6 +122,7 @@ public struct FleetTracker: Sendable {
         let others = agents.filter { $0.name != ownName }
         var summary = FleetSummary()
         var events: [FleetEvent] = []
+        if own == .working { ownWorkedAt = now }
         for agent in others {
             switch agent.status {
             case .working: summary.working += 1
@@ -120,16 +131,21 @@ public struct FleetTracker: Sendable {
             case .idle, .unknown: break
             }
             let before = known[agent.paneID]
-            if agent.status == .working, workingSince[agent.paneID] == nil { workingSince[agent.paneID] = now }
+            if agent.status == .working, workingSince[agent.paneID] == nil {
+                workingSince[agent.paneID] = now
+                if primed, now.timeIntervalSince(ownWorkedAt) <= Self.askedWithin { asked.insert(agent.paneID) }
+            }
             let worked = workingSince[agent.paneID].map { now.timeIntervalSince($0) } ?? 0
             if agent.status != .working { workingSince[agent.paneID] = nil }
             // The first snapshot is the state of the world, not news.
             guard primed, before != agent.status else { continue }
+            let wasAsked = asked.contains(agent.paneID)
+            if agent.status != .working { asked.remove(agent.paneID) }
             if agent.status == .blocked {
-                events.append(FleetEvent(kind: .blocked, agent: agent))
+                events.append(FleetEvent(kind: .blocked, agent: agent, asked: wasAsked))
             } else if before == .working {
-                if agent.isOwn, agent.status == .done || agent.status == .idle {
-                    events.append(FleetEvent(kind: .finished, agent: agent))
+                if agent.isOwn || wasAsked, agent.status == .done || agent.status == .idle {
+                    events.append(FleetEvent(kind: .finished, agent: agent, asked: wasAsked))
                 } else if agent.status == .done, worked >= Self.minimumTurn {
                     // herdr marks a finished turn "done" until someone looks at
                     // the pane. Straight to idle means the user was watching it.
@@ -139,6 +155,7 @@ public struct FleetTracker: Sendable {
         }
         known = Dictionary(others.map { ($0.paneID, $0.status) }, uniquingKeysWith: { first, _ in first })
         workingSince = workingSince.filter { known[$0.key] != nil }
+        asked = asked.filter { known[$0] != nil }
         primed = true
         let workers = others.filter { $0.isOwn && $0.status == .working }
         return FleetUpdate(summary: summary, events: events, own: own, workers: workers)
