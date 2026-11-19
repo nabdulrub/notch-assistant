@@ -13,6 +13,8 @@ final class LiveSession: VoiceLine {
     var onHandOff: ((String) -> Void)?
     /// Never called: this model stops talking by itself when it is talked over.
     var onCutIn: (() -> Void)?
+    var onCutHeard: ((String) -> Void)?
+    var onNothingAsked: (() -> Void)?
     /// Never called: the words it recognises are checked for a goodbye instead.
     var onDismissed: (() -> Void)?
     var onEnded: ((Bool) -> Void)?

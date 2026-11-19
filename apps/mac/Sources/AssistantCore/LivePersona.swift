@@ -108,6 +108,12 @@ public struct Dialogue: Sendable {
         lines[index].cutOff = true
     }
 
+    /// The line was picked back up and said to the end.
+    public mutating func heardAfterAll(_ index: Int) {
+        guard lines.indices.contains(index) else { return }
+        lines[index].cutOff = false
+    }
+
     /// This speaker's most recent line and where it is in the conversation.
     public func latest(_ speaker: Speaker) -> (index: Int, text: String)? {
         guard let index = lines.lastIndex(where: { $0.speaker == speaker }) else { return nil }

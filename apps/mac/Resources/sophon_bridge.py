@@ -20,6 +20,7 @@ Text frames are JSON:
                  {"type": "voice_text", "text": ...}      what it is saying, as it grows
                  {"type": "interrupt"}                    stop playing: drop the audio not yet played
                  {"type": "cut", "said": ...}             the user cut in; this much had been heard
+                 {"type": "silent"}                       it heard a turn and found nothing in it to answer
                  {"type": "error", "message": ...}
 
 It needs Sophon-Realtime's Mac build installed (github.com/adventists-ai/sophon-realtime, mac/install.sh) and is run
@@ -251,6 +252,8 @@ class JarvisSession(Session):
         if not r["cancel"] or a24 is None:
             if kind == "handoff" and request_of(text): self.note({"type": "handoff", "id": uuid.uuid4().hex[:12], "request": request_of(text)})
             elif kind == "goodbye": self.note({"type": "goodbye"})
+            # Said so the app can tell a noise from a request: a line that a noise cut off is picked back up.
+            elif kind == "silent": self.note({"type": "silent"})
         self.ev("reply_done", text=text, audio_s=round(r["gen_s"], 2), cancelled=r["cancel"], sec=round(time.time() - t0, 2), hist=len(self.history))
 
     def _run_say(self, r):
