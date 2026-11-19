@@ -63,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var isConversing: Bool { conversation != nil }
 
+    @objc private func sendToSleep() {
+        conversation?.dismiss(how: "the menu")
+    }
+
     @objc private func showSettings() {
         guard setup == nil else { return }
         if let settingsWindow { return settingsWindow.show() }
@@ -182,6 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         header.isEnabled = false
         menu.addItem(header)
         if !demo {
+            let sleepItem = NSMenuItem(title: "Send \(settings.assistantName) to Sleep", action: #selector(sendToSleep), keyEquivalent: "")
+            sleepItem.target = self
+            menu.addItem(sleepItem)
             let settingsItem = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
             settingsItem.target = self
             menu.addItem(settingsItem)
