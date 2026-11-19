@@ -33,6 +33,24 @@ if arguments.contains("--snapshot") {
     }
 }
 
+/// `--snapshot-settings <dir>` does the same for the settings window.
+if arguments.contains("--snapshot-settings") {
+    guard let path = value(after: "--snapshot-settings") else {
+        print("usage: Assistant --snapshot-settings <directory>")
+        exit(2)
+    }
+    MainActor.assumeIsolated {
+        _ = NSApplication.shared
+        do {
+            for file in try Snapshot.settings(directory: URL(fileURLWithPath: path, isDirectory: true)) { print(file.lastPathComponent) }
+            exit(0)
+        } catch {
+            print("snapshot failed: \(error)")
+            exit(1)
+        }
+    }
+}
+
 /// `--snapshot-setup <dir>` does the same for the setup screens.
 if arguments.contains("--snapshot-setup") {
     guard let path = value(after: "--snapshot-setup") else {
@@ -150,7 +168,9 @@ guard SingleInstance.claim() else {
 MainActor.assumeIsolated {
     let application = NSApplication.shared
     // `--setup` opens the first-run setup again, whether or not it was finished.
-    let delegate = AppDelegate(demo: arguments.contains("--demo"), setup: arguments.contains("--setup"))
+    // `--settings` opens the settings window as it starts.
+    let delegate = AppDelegate(demo: arguments.contains("--demo"), setup: arguments.contains("--setup"),
+                               settings: arguments.contains("--settings"))
     application.delegate = delegate
     application.setActivationPolicy(.accessory)
     delegateHolder = delegate

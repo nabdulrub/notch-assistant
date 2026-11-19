@@ -63,6 +63,36 @@ enum Snapshot {
         return written
     }
 
+    /// Each section of the settings window, with a persona and a rule written
+    /// in so the editors are seen holding something.
+    static func settings(directory: URL) throws -> [URL] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var written: [URL] = []
+        for (index, section) in SettingsModel.Section.allCases.enumerated() {
+            let model = SettingsModel(settings: AssistantSettings(voiceEngine: "live"))
+            model.section = section
+            model.draft.delegation.workerModel = "sonnet"
+            model.draft.delegation.lightWorkerModel = "haiku"
+            model.draft.personality = "You are calm and precise, a little formal, and you never joke about prod."
+            model.draft.customInstructions = "Open every pull request as a draft.\nNever touch the main checkout."
+            let view = SettingsView(model: model, frozenTime: 2.0)
+                .background(LinearGradient(colors: [Color(red: 0.2, green: 0.24, blue: 0.32), Color(red: 0.3, green: 0.26, blue: 0.24)],
+                                           startPoint: .top, endPoint: .bottom))
+            let host = NSHostingView(rootView: view)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsView.size), styleMask: [.borderless],
+                                  backing: .buffered, defer: false)
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw CocoaError(.fileWriteUnknown) }
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+            let file = directory.appendingPathComponent("settings-\(index + 1)-\(section.rawValue).png")
+            try png.write(to: file)
+            written.append(file)
+        }
+        return written
+    }
+
     /// The app icon: the eyes on the island's black, at the size macOS asks for.
     static func icon(to file: URL) throws {
         let view = ZStack {

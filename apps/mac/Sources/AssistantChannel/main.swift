@@ -16,7 +16,10 @@ func argument(_ flag: String) -> String? {
 
 let assistantName = AssistantSettings.cleaned(name: argument("--name") ?? "Jarvis")
 let socketPath = argument("--socket") ?? UnixSocket.standardPath
-let server = ChannelServer(assistantName: assistantName)
+// The app writes the instructions the user's settings add up to; without the
+// file, the defaults.
+let written = argument("--persona").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }
+let server = ChannelServer(assistantName: assistantName, instructions: written.flatMap { $0.isEmpty ? nil : $0 })
 
 /// Stdout is shared by the reader loop and the socket thread; one line at a time.
 final class Output: @unchecked Sendable {

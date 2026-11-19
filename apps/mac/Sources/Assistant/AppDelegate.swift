@@ -6,7 +6,11 @@ import AssistantCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let demo: Bool
     private let forceSetup: Bool
+    private let openSettings: Bool
     private var setup: SetupWindowController?
+    private var settingsWindow: SettingsWindowController?
+    /// Set when a saved change needs the app itself to start again.
+    private var restartWhenSettingsClose = false
     private var model: NotchModel?
     private var notch: NotchController?
     private var demoDriver: DemoDriver?
@@ -15,9 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var bridge: BridgeServer?
     private var statusItem: NSStatusItem?
 
-    init(demo: Bool, setup: Bool = false) {
+    init(demo: Bool, setup: Bool = false, settings: Bool = false) {
         self.demo = demo
         forceSetup = setup
+        openSettings = settings
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -47,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showSetup()
         } else {
             startConversation(settings, setupIfNotReady: true)
+            if openSettings { showSettings() }
         }
     }
 
@@ -57,8 +63,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var isConversing: Bool { conversation != nil }
 
-    @objc private func showSetup() {
+    @objc private func showSettings() {
         guard setup == nil else { return }
+        if let settingsWindow { return settingsWindow.show() }
+        let controller = SettingsWindowController(settings: SettingsStore.standard.load()) { [weak self] in
+            guard let self else { return }
+            self.settingsWindow = nil
+            if self.isConversing {
+                if self.restartWhenSettingsClose { self.relaunch() }
+            } else if self.setup == nil {
+                self.startConversation(SettingsStore.standard.load())
+            }
+        }
+        controller.model.onSave = { [weak self] old, new in self?.apply(old: old, new: new) ?? "Saved." }
+        controller.model.onOpenSetup = { [weak self] in
+            // Setup takes the window's place. One at a time, since each of them
+            // decides whether the app shows in the Dock.
+            self?.settingsWindow?.close()
+            self?.showSetup()
+        }
+        settingsWindow = controller
+        controller.show()
+    }
+
+    /// Puts saved settings to work without making the user start anything again
+    /// where that can be helped, and says in a sentence what became of them.
+    private func apply(old: AssistantSettings, new: AssistantSettings) -> String {
+        SessionFiles.write(settings: new)
+        var said = ["Saved."]
+        if Persona.instructions(for: old) != Persona.instructions(for: new) {
+            let reached = bridge?.send(.event(kind: "instructions", text: Persona.update(for: new))) ?? false
+            Log.write(reached ? "sent the session its new instructions" : "new instructions written; no session attached to send them to")
+            said.append(reached ? "The session has its new instructions." : "No session is attached, so it reads them when one starts.")
+        }
+        if old.model != new.model {
+            // A running session is left on its model. Switching it from outside
+            // means typing /model into it, and that also rewrites the model
+            // every new Claude Code session of the user's starts on.
+            said.append("The session runs on \(new.model) the next time it starts.")
+        }
+        if old.needsRestart(toBecome: new), isConversing {
+            restartWhenSettingsClose = true
+            said.append("The rest takes hold when you close this window.")
+        }
+        return said.joined(separator: " ")
+    }
+
+    @objc private func showSetup() {
+        guard setup == nil, settingsWindow == nil else { return }
         let controller = SetupWindowController(settings: SettingsStore.standard.load(), bridge: bridge) { [weak self] finished in
             guard let self else { return }
             self.setup = nil
@@ -110,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             Log.write("voice: live")
             let voice = settings.liveVoice
-            let instructions = LivePersona.instructions(name: settings.assistantName)
+            let instructions = LivePersona.instructions(name: settings.assistantName, personality: settings.personality)
             line = { LiveSession(key: key, voice: voice, instructions: instructions) }
         }
         // One engine for the microphone and the voice, so the echo canceller
@@ -130,7 +182,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         header.isEnabled = false
         menu.addItem(header)
         if !demo {
-            let setupItem = NSMenuItem(title: "Setup\u{2026}", action: #selector(showSetup), keyEquivalent: ",")
+            let settingsItem = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
+            settingsItem.target = self
+            menu.addItem(settingsItem)
+            let setupItem = NSMenuItem(title: "Run Setup Again\u{2026}", action: #selector(showSetup), keyEquivalent: "")
             setupItem.target = self
             menu.addItem(setupItem)
         }
@@ -154,11 +209,10 @@ enum SessionFiles {
 
     static func write(settings: AssistantSettings) {
         let data = SessionCommand.mcpConfig(helperPath: helperPath, assistantName: settings.assistantName,
-                                            socketPath: UnixSocket.standardPath)
+                                            socketPath: UnixSocket.standardPath, personaPath: persona.path)
         try? FileManager.default.createDirectory(at: SettingsStore.standard.directory, withIntermediateDirectories: true)
         try? data.write(to: mcpConfig, options: .atomic)
-        let voice: Persona.VoiceLayer = settings.voiceEngine == "sophon" ? .wordForWord : .retold
-        try? Data(Persona.instructions(name: settings.assistantName, voice: voice).utf8).write(to: persona, options: .atomic)
+        try? Data(Persona.instructions(for: settings).utf8).write(to: persona, options: .atomic)
     }
 
     static func session(settings: AssistantSettings) -> SessionCommand {

@@ -1,5 +1,62 @@
 import Foundation
 
+/// How work is handed out: how much the session does itself, where its workers
+/// run, on which models, and how many at once.
+public struct Delegation: Codable, Equatable, Sendable {
+    public enum Style: String, Codable, CaseIterable, Sendable {
+        /// It never does the work itself, not even a one-line check.
+        case always
+        /// It may take a quick read-only look; everything else is handed over.
+        case quickLooks
+        /// It does small jobs itself and hands over the bigger ones.
+        case handsOn
+    }
+
+    public enum Runner: String, Codable, CaseIterable, Sendable {
+        /// herdr agents inside herdr, background subagents anywhere else.
+        case auto
+        case herdr
+        case subagents
+    }
+
+    public static let mostWorkers = 8
+
+    public var style: Style
+    public var runner: Runner
+    /// The model workers do real work on. Empty leaves it to the user's own
+    /// Claude instructions.
+    public var workerModel: String
+    /// The model for small mechanical jobs and lookups. Empty, the same.
+    public var lightWorkerModel: String
+    public var maxWorkers: Int
+    /// Whether it asks out loud before sending input to an agent it did not start.
+    public var askBeforeTouchingOthers: Bool
+
+    public init(style: Style = .always, runner: Runner = .auto, workerModel: String = "", lightWorkerModel: String = "",
+                maxWorkers: Int = 3, askBeforeTouchingOthers: Bool = true) {
+        self.style = style
+        self.runner = runner
+        self.workerModel = workerModel
+        self.lightWorkerModel = lightWorkerModel
+        self.maxWorkers = min(max(maxWorkers, 1), Self.mostWorkers)
+        self.askBeforeTouchingOthers = askBeforeTouchingOthers
+    }
+
+    /// Like the settings as a whole, every field is optional on disk, and a
+    /// value it does not know falls back to the default.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Delegation()
+        style = (try? container.decodeIfPresent(Style.self, forKey: .style)) ?? fallback.style
+        runner = (try? container.decodeIfPresent(Runner.self, forKey: .runner)) ?? fallback.runner
+        workerModel = (try? container.decodeIfPresent(String.self, forKey: .workerModel)) ?? fallback.workerModel
+        lightWorkerModel = (try? container.decodeIfPresent(String.self, forKey: .lightWorkerModel)) ?? fallback.lightWorkerModel
+        let most = (try? container.decodeIfPresent(Int.self, forKey: .maxWorkers)) ?? fallback.maxWorkers
+        maxWorkers = min(max(most, 1), Self.mostWorkers)
+        askBeforeTouchingOthers = (try? container.decodeIfPresent(Bool.self, forKey: .askBeforeTouchingOthers)) ?? fallback.askBeforeTouchingOthers
+    }
+}
+
 /// Everything the user can change. Stored as one JSON file; there is no database.
 public struct AssistantSettings: Codable, Equatable, Sendable {
     /// The name it answers to and calls itself. Drives the wake word, the persona
@@ -26,6 +83,13 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
     /// Seconds of quiet before the line to the voice model is closed. OpenAI's
     /// is billed while open.
     public var liveIdle: Double
+    /// How work is handed out to workers.
+    public var delegation: Delegation
+    /// Who it is and how it sounds, in the user's own words. Empty is the
+    /// character it ships with.
+    public var personality: String
+    /// The user's own rules, added after everything else the session is told.
+    public var customInstructions: String
     /// False until the first-run setup has been finished once.
     public var setupDone: Bool
 
@@ -33,6 +97,7 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
                 model: String = "sonnet", language: String = "en-US",
                 workingDirectory: String = "~/Desktop/dev", updateEvery: Double = 40,
                 voiceEngine: String = "live", liveVoice: String = "marin", liveIdle: Double = 15,
+                delegation: Delegation = Delegation(), personality: String = "", customInstructions: String = "",
                 setupDone: Bool = false) {
         self.assistantName = assistantName
         self.wakeAliases = wakeAliases
@@ -44,6 +109,9 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
         self.voiceEngine = voiceEngine
         self.liveVoice = liveVoice
         self.liveIdle = liveIdle
+        self.delegation = delegation
+        self.personality = personality
+        self.customInstructions = customInstructions
         self.setupDone = setupDone
     }
 
@@ -63,7 +131,19 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
         voiceEngine = try container.decodeIfPresent(String.self, forKey: .voiceEngine) == "sophon" ? "sophon" : "live"
         liveVoice = try container.decodeIfPresent(String.self, forKey: .liveVoice) ?? fallback.liveVoice
         liveIdle = try container.decodeIfPresent(Double.self, forKey: .liveIdle) ?? fallback.liveIdle
+        delegation = (try? container.decodeIfPresent(Delegation.self, forKey: .delegation)) ?? fallback.delegation
+        personality = try container.decodeIfPresent(String.self, forKey: .personality) ?? fallback.personality
+        customInstructions = try container.decodeIfPresent(String.self, forKey: .customInstructions) ?? fallback.customInstructions
         setupDone = try container.decodeIfPresent(Bool.self, forKey: .setupDone) ?? fallback.setupDone
+    }
+
+    /// Whether the app itself has to start again for a change to take hold.
+    /// What only the session is told does not count: that is sent to it.
+    public func needsRestart(toBecome other: AssistantSettings) -> Bool {
+        assistantName != other.assistantName || wakeAliases != other.wakeAliases || talkKey != other.talkKey
+            || language != other.language || updateEvery != other.updateEvery || voiceEngine != other.voiceEngine
+            || liveVoice != other.liveVoice || liveIdle != other.liveIdle
+            || (other.voiceEngine == "live" && personality != other.personality)
     }
 
     /// An empty name would make every sentence a wake word.
