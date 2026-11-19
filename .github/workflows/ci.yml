@@ -16,11 +16,11 @@ concurrency:
 jobs:
   test:
     name: Tests
-    runs-on: macos-26
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - run: swift --version
+      - run: sw_vers -productVersion && xcodebuild -version && swift --version
       - name: Build and test
         working-directory: apps/mac
         run: swift test
