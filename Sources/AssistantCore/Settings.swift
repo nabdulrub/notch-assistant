@@ -13,39 +13,34 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
     public var model: String
     /// The language it listens in, as a BCP 47 tag.
     public var language: String
-    /// The Rime voice it speaks with.
-    public var rimeSpeaker: String
     /// The folder the orchestrator session starts in.
     public var workingDirectory: String
     /// Seconds between spoken updates while its workers are busy. 0 turns them off.
     public var updateEvery: Double
-    /// Whether talking over it interrupts it. Needs echo cancellation, which
-    /// turns other audio down a little while the app is running.
-    public var bargeIn: Bool
-    /// "local": on-device speech recognition and Rime. "live": a full-duplex
-    /// voice model does the listening and talking, and hands work to the session.
+    /// Which voice model does the listening and talking, and hands work to the
+    /// session. "live": OpenAI's, with the user's own key. "sophon": an open
+    /// model that runs on this Mac and needs no key.
     public var voiceEngine: String
     /// The voice the live engine speaks with.
     public var liveVoice: String
-    /// Seconds of quiet before a live session is closed. It is billed while open.
+    /// Seconds of quiet before the line to the voice model is closed. OpenAI's
+    /// is billed while open.
     public var liveIdle: Double
     /// False until the first-run setup has been finished once.
     public var setupDone: Bool
 
     public init(assistantName: String = "Jarvis", wakeAliases: [String] = [], talkKey: KeyCombo = .defaultTalk,
-                model: String = "sonnet", language: String = "en-US", rimeSpeaker: String = "",
-                workingDirectory: String = "~/Desktop/dev", updateEvery: Double = 40, bargeIn: Bool = true,
-                voiceEngine: String = "local", liveVoice: String = "marin", liveIdle: Double = 15,
+                model: String = "sonnet", language: String = "en-US",
+                workingDirectory: String = "~/Desktop/dev", updateEvery: Double = 40,
+                voiceEngine: String = "live", liveVoice: String = "marin", liveIdle: Double = 15,
                 setupDone: Bool = false) {
         self.assistantName = assistantName
         self.wakeAliases = wakeAliases
         self.talkKey = talkKey
         self.model = model
         self.language = language
-        self.rimeSpeaker = rimeSpeaker
         self.workingDirectory = workingDirectory
         self.updateEvery = updateEvery
-        self.bargeIn = bargeIn
         self.voiceEngine = voiceEngine
         self.liveVoice = liveVoice
         self.liveIdle = liveIdle
@@ -62,11 +57,10 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
         talkKey = try container.decodeIfPresent(KeyCombo.self, forKey: .talkKey) ?? fallback.talkKey
         model = try container.decodeIfPresent(String.self, forKey: .model) ?? fallback.model
         language = try container.decodeIfPresent(String.self, forKey: .language) ?? fallback.language
-        rimeSpeaker = try container.decodeIfPresent(String.self, forKey: .rimeSpeaker) ?? fallback.rimeSpeaker
         workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory) ?? fallback.workingDirectory
         updateEvery = try container.decodeIfPresent(Double.self, forKey: .updateEvery) ?? fallback.updateEvery
-        bargeIn = try container.decodeIfPresent(Bool.self, forKey: .bargeIn) ?? fallback.bargeIn
-        voiceEngine = try container.decodeIfPresent(String.self, forKey: .voiceEngine) ?? fallback.voiceEngine
+        // Anything else is a value from an engine that no longer exists.
+        voiceEngine = try container.decodeIfPresent(String.self, forKey: .voiceEngine) == "sophon" ? "sophon" : "live"
         liveVoice = try container.decodeIfPresent(String.self, forKey: .liveVoice) ?? fallback.liveVoice
         liveIdle = try container.decodeIfPresent(Double.self, forKey: .liveIdle) ?? fallback.liveIdle
         setupDone = try container.decodeIfPresent(Bool.self, forKey: .setupDone) ?? fallback.setupDone

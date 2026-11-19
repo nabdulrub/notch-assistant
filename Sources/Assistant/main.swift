@@ -100,21 +100,8 @@ if arguments.contains("--fleet") {
     exit(0)
 }
 
-/// `--store-rime-key` reads the key from standard input, so it never appears in
-/// a command line or a shell history.
-if arguments.contains("--store-rime-key") {
-    let key = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    do {
-        try Secrets.storeRimeKey(key)
-        print("stored")
-        exit(0)
-    } catch {
-        print("nothing stored: the input was empty")
-        exit(1)
-    }
-}
-
-/// `--store-openai-key` does the same for the key the live voice engine uses.
+/// `--store-openai-key` reads the key from standard input, so it never appears
+/// in a command line or a shell history.
 if arguments.contains("--store-openai-key") {
     let key = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
     do {
@@ -127,8 +114,8 @@ if arguments.contains("--store-openai-key") {
     }
 }
 
-/// `--check-keys` asks each service whether the stored key still works. With
-/// `--bad` it sends a made-up key instead, to see a refusal.
+/// `--check-keys` asks OpenAI whether the stored key still works. With `--bad`
+/// it sends a made-up key instead, to see a refusal.
 if arguments.contains("--check-keys") {
     let bad = arguments.contains("--bad")
     let done = DispatchSemaphore(value: 0)
@@ -138,14 +125,15 @@ if arguments.contains("--check-keys") {
         } else {
             print("OpenAI: no key stored")
         }
-        if let key = bad ? "not-a-real-key" : Secrets.rimeKey {
-            print("Rime: \(await KeyCheck.rime(key) ?? "works")")
-        } else {
-            print("Rime: no key stored")
-        }
         done.signal()
     }
     done.wait()
+    exit(0)
+}
+
+// Opened twice by accident, the second copy leaves at once.
+guard SingleInstance.claim() else {
+    Log.write("another copy is already running; this one is leaving")
     exit(0)
 }
 

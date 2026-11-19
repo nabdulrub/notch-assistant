@@ -24,6 +24,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/Assistant" "$APP/Contents/MacOS/Assistant"
 cp "$BIN_DIR/AssistantChannel" "$APP/Contents/MacOS/assistant-channel"
 sed "s/__APP_NAME__/$APP_NAME/g" "$ROOT/Resources/Info.plist" > "$APP/Contents/Info.plist"
+# The bridge to the voice model that runs on this Mac. It is run with that model's own Python.
+cp "$ROOT/Resources/sophon_bridge.py" "$APP/Contents/Resources/sophon_bridge.py"
 
 # The icon is drawn by the app itself, so it always matches the eyes in the notch.
 ICONSET="$(mktemp -d)/AppIcon.iconset"

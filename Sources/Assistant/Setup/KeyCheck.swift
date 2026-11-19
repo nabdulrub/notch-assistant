@@ -1,7 +1,7 @@
 import Foundation
 
-/// Asks each service whether a key is any good, before it is saved.
-/// Every check returns nil when the key works, or a sentence saying why not.
+/// Asks OpenAI whether a key is any good, before it is saved. Returns nil when
+/// the key works, or a sentence saying why not.
 enum KeyCheck {
     /// The live voice needs this exact model, so that is what is asked for.
     static func openAI(_ key: String) async -> String? {
@@ -19,29 +19,6 @@ enum KeyCheck {
             }
         } catch {
             return "Could not reach OpenAI. Check the connection and try again."
-        }
-    }
-
-    /// Rime says "ready" as soon as a connection with a good key is open.
-    static func rime(_ key: String) async -> String? {
-        var request = URLRequest(url: URL(string: "wss://coda.api.rime.ai/ws")!)
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 10
-        let task = URLSession(configuration: .ephemeral).webSocketTask(with: request)
-        task.resume()
-        let timeout = Task {
-            try? await Task.sleep(for: .seconds(8))
-            task.cancel(with: .goingAway, reason: nil)
-        }
-        defer {
-            timeout.cancel()
-            task.cancel(with: .normalClosure, reason: nil)
-        }
-        do {
-            if case .string(let text) = try await task.receive(), text.contains("\"ready\"") { return nil }
-            return "Rime did not accept that key."
-        } catch {
-            return "Rime did not accept that key, or could not be reached."
         }
     }
 }

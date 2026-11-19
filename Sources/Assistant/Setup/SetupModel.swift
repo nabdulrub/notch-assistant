@@ -20,9 +20,6 @@ final class SetupModel: ObservableObject {
         var isUsable: Bool { self == .saved || self == .good }
     }
 
-    enum Service {
-        case openAI, rime
-    }
 
     static let liveVoices = [
         "marin", "quartz", "ripple", "vesper", "willow", "stone", "gleam", "meridian", "bossa", "tempo", "beacon",
@@ -35,8 +32,9 @@ final class SetupModel: ObservableObject {
     @Published var liveVoice: String
     @Published var openAIKey = ""
     @Published var openAIState: KeyState
-    @Published var rimeKey = ""
-    @Published var rimeState: KeyState
+    /// Whether the model that runs on this Mac has been installed.
+    @Published var localModelInstalled: Bool
+    @Published var copiedInstall = false
     @Published var microphone: AVAuthorizationStatus
     @Published var sessionAttached = false
     @Published var startingSession = false
@@ -61,11 +59,10 @@ final class SetupModel: ObservableObject {
         self.settings = settings
         self.bridge = bridge
         name = settings.assistantName
-        // Someone setting up for the first time gets the better engine offered first.
-        engine = settings.setupDone ? settings.voiceEngine : "live"
+        engine = settings.voiceEngine
         liveVoice = settings.liveVoice
         openAIState = Secrets.openAIKey == nil ? .empty : .saved
-        rimeState = Secrets.rimeKey == nil ? .empty : .saved
+        localModelInstalled = SophonServer.install() != nil
         microphone = AVCaptureDevice.authorizationStatus(for: .audio)
         // The default suits the machine it was written on; anywhere else, start at home.
         let folder = (settings.workingDirectory as NSString).expandingTildeInPath
@@ -100,12 +97,16 @@ final class SetupModel: ObservableObject {
         if attached != sessionAttached { sessionAttached = attached }
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         if status != microphone { microphone = status }
+        if step == .voice, engine == "sophon" {
+            let installed = SophonServer.install() != nil
+            if installed != localModelInstalled { localModelInstalled = installed }
+        }
     }
 
     // MARK: What the eyes do
 
     var eyes: Phase {
-        if openAIState == .checking || rimeState == .checking || startingSession { return .thinking }
+        if openAIState == .checking || startingSession { return .thinking }
         switch step {
         case .name, .microphone: return .listening
         case .voice, .ready: return .followUp
@@ -122,12 +123,12 @@ final class SetupModel: ObservableObject {
         case .name:
             return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .voice:
-            let (text, state) = engine == "live" ? (openAIKey, openAIState) : (rimeKey, rimeState)
-            switch state {
+            // The voice on this Mac needs no key, only its model.
+            if engine == "sophon" { return localModelInstalled }
+            switch openAIState {
             case .checking, .bad: return false
             case .saved, .good: return true
-            // The voice on this Mac works with no key at all.
-            case .empty: return engine == "local" || !text.isEmpty
+            case .empty: return !openAIKey.isEmpty
             }
         case .microphone, .session, .ready:
             return true
@@ -138,17 +139,13 @@ final class SetupModel: ObservableObject {
 
     func next() {
         guard canContinue else { return }
-        if step == .voice {
+        if step == .voice, engine == "live", !openAIKey.isEmpty, openAIState == .empty {
             // A key that was typed but never checked is checked on the way out.
-            let service: Service = engine == "live" ? .openAI : .rime
-            let (text, state) = service == .openAI ? (openAIKey, openAIState) : (rimeKey, rimeState)
-            if !text.isEmpty, state == .empty {
-                Task {
-                    await check(service)
-                    if (service == .openAI ? openAIState : rimeState) == .good { advance() }
-                }
-                return
+            Task {
+                await checkKey()
+                if openAIState == .good { advance() }
             }
+            return
         }
         advance()
     }
@@ -182,35 +179,31 @@ final class SetupModel: ObservableObject {
 
     // MARK: Keys
 
-    func edited(_ service: Service) {
-        switch service {
-        case .openAI:
-            guard openAIState != .checking else { return }
-            openAIState = openAIKey.isEmpty && Secrets.openAIKey != nil ? .saved : .empty
-        case .rime:
-            guard rimeState != .checking else { return }
-            rimeState = rimeKey.isEmpty && Secrets.rimeKey != nil ? .saved : .empty
+    func keyEdited() {
+        guard openAIState != .checking else { return }
+        openAIState = openAIKey.isEmpty && Secrets.openAIKey != nil ? .saved : .empty
+    }
+
+    func checkKey() async {
+        let key = openAIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        openAIState = .checking
+        if let problem = await KeyCheck.openAI(key) {
+            openAIState = .bad(problem)
+        } else {
+            openAIState = (try? Secrets.storeOpenAIKey(key)) == nil ? .bad("The key works but could not be saved on this Mac.") : .good
         }
     }
 
-    func check(_ service: Service) async {
-        let key = (service == .openAI ? openAIKey : rimeKey).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        switch service {
-        case .openAI:
-            openAIState = .checking
-            if let problem = await KeyCheck.openAI(key) {
-                openAIState = .bad(problem)
-            } else {
-                openAIState = (try? Secrets.storeOpenAIKey(key)) == nil ? .bad("The key works but could not be saved on this Mac.") : .good
-            }
-        case .rime:
-            rimeState = .checking
-            if let problem = await KeyCheck.rime(key) {
-                rimeState = .bad(problem)
-            } else {
-                rimeState = (try? Secrets.storeRimeKey(key)) == nil ? .bad("The key works but could not be saved on this Mac.") : .good
-            }
+    // MARK: The model on this Mac
+
+    func copyInstallCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(SophonServer.installCommand, forType: .string)
+        copiedInstall = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            copiedInstall = false
         }
     }
 

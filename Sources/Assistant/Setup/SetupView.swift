@@ -62,17 +62,17 @@ struct SetupView: View {
     }
 
     private var voiceStep: some View {
-        page("How should we talk?", "You can switch later. Keys are checked, then kept in a file on this Mac that only you can read.") {
+        page("How should we talk?", "Either way a voice model does the talking and hands the real work to Claude Code. You can switch later.") {
             HStack(alignment: .top, spacing: 12) {
                 choice("live", title: "Live",
-                       detail: "OpenAI's voice model runs the conversation. It knows when you are done and you can cut in. Billed by OpenAI for each minute we are connected, and I hang up when we go quiet.")
-                choice("local", title: "On this Mac",
-                       detail: "Your speech is recognised on this Mac. Taking turns is slower. A Rime key gives me a better voice; without one I use the system voice.")
+                       detail: "OpenAI's voice model, on your own OpenAI API key. The best listener and the best voice. OpenAI bills you for each minute we are connected, and I hang up when we go quiet.")
+                choice("sophon", title: "On this Mac",
+                       detail: "Sophon, a small open model that runs right here. No key, no account, and nothing you say leaves the Mac. Needs a 9 GB download and about 9 GB of memory while I am open. Experimental.")
             }
             if model.engine == "live" {
-                keyField("OpenAI API key", saved: "Saved. Paste another key to replace it.", text: $model.openAIKey,
-                         state: model.openAIState, good: "Key works. Saved on this Mac.") { Task { await model.check(.openAI) } }
-                    .onChange(of: model.openAIKey) { model.edited(.openAI) }
+                keyField("Your OpenAI API key", saved: "Saved. Paste another key to replace it.", text: $model.openAIKey,
+                         state: model.openAIState, good: "Key works. Kept in a file on this Mac that only you can read.") { Task { await model.checkKey() } }
+                    .onChange(of: model.openAIKey) { model.keyEdited() }
                 HStack(spacing: 10) {
                     Text("Voice")
                         .font(.system(size: 13))
@@ -85,10 +85,16 @@ struct SetupView: View {
                     .fixedSize()
                     Spacer()
                 }
+            } else if model.localModelInstalled {
+                status("checkmark.circle", "Sophon is installed. It loads when I start and takes about ten seconds.")
             } else {
-                keyField("Rime API key, or leave empty", saved: "Saved. Paste another key to replace it.", text: $model.rimeKey,
-                         state: model.rimeState, good: "Key works. Saved on this Mac.") { Task { await model.check(.rime) } }
-                    .onChange(of: model.rimeKey) { model.edited(.rime) }
+                Text("Sophon is not on this Mac yet. Paste the install command in a terminal, let it finish, and this page will notice.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(model.copiedInstall ? "Copied" : "Copy the install command") { model.copyInstallCommand() }
+                    .buttonStyle(QuietButton())
             }
         }
     }

@@ -5,15 +5,23 @@ import Foundation
 /// transcripts down, and the hand-offs the voice model makes when it is asked
 /// for something it cannot answer itself.
 @MainActor
-final class LiveSession {
+final class LiveSession: VoiceLine {
     var onStarted: (() -> Void)?
     var onAudio: ((Data) -> Void)?
     var onUserText: ((String) -> Void)?
     var onVoiceText: ((String) -> Void)?
-    /// The voice model wants the backend to deal with what was just said.
     var onHandOff: ((String) -> Void)?
-    /// Called once, however it ended. The flag is true when that was asked for.
+    /// Never called: this model stops talking by itself when it is talked over.
+    var onCutIn: (() -> Void)?
+    /// Never called: the words it recognises are checked for a goodbye instead.
+    var onDismissed: (() -> Void)?
     var onEnded: ((Bool) -> Void)?
+
+    let speaksWordForWord = false
+
+    private let key: String
+    private let voice: String
+    private let instructions: String
 
     private let session = URLSession(configuration: .ephemeral)
     private var socket: URLSessionWebSocketTask?
@@ -40,7 +48,14 @@ final class LiveSession {
     /// Audio held while the session is still starting. Ten seconds of it.
     private static let waitingLimit = 24000 * 2 * 10
 
-    func open(key: String, voice: String, instructions: String) {
+    /// - Parameter key: the user's own OpenAI key. There is no other.
+    init(key: String, voice: String, instructions: String) {
+        self.key = key
+        self.voice = voice
+        self.instructions = instructions
+    }
+
+    func open() {
         var request = URLRequest(url: Self.endpoint)
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
@@ -106,13 +121,17 @@ final class LiveSession {
     }
 
     /// Something for the voice to know without saying it now.
-    func remember(_ text: String, handOff: String? = nil) {
+    func remember(_ text: String, handOff: String?) {
         send(["type": "session.thinking.append", "delegation_id": handOff ?? NSNull(), "content": String(text.prefix(1800))])
     }
 
     func setMuted(_ muted: Bool) {
         send(["type": muted ? "session.input_audio.mute" : "session.input_audio.unmute"])
     }
+
+    /// What is still queued to play is thrown away by the caller; the model
+    /// itself needs no telling.
+    func interrupt() {}
 
     func close() {
         guard !closing, !ended else { return }

@@ -2,14 +2,14 @@ import AVFoundation
 import AssistantCore
 import Foundation
 
-/// The conversation when a full-duplex voice model does the talking.
+/// The conversation: a full-duplex voice model does the talking, and the
+/// Claude session behind it does the work.
 ///
-/// Asleep, nothing leaves the Mac: the name is listened for on-device, as in
-/// local mode. Once woken, the microphone is streamed to the voice model, which
-/// handles whose turn it is, being talked over, and small talk. When it is asked
-/// for something real it hands off, and the request goes to the Claude session
-/// exactly as a spoken one does in local mode. What the session says comes back
-/// through the voice.
+/// Asleep, nothing leaves the Mac: the name is listened for on-device. Once
+/// woken, the microphone is streamed to the voice model, which handles whose
+/// turn it is, being talked over, and small talk. When it is asked for
+/// something real it hands off, and the request goes to the Claude session.
+/// What the session says comes back through the voice.
 @MainActor
 final class LiveConversation {
     private enum State {
@@ -21,7 +21,7 @@ final class LiveConversation {
     private let settings: AssistantSettings
     private let model: NotchModel
     private let bridge: BridgeServer
-    private let key: String
+    private let makeLine: () -> VoiceLine
     private let ears: Ears
     private let player: PCMPlayer
     private let hotkey = HotkeyManager()
@@ -29,7 +29,7 @@ final class LiveConversation {
     private let matcher: WakeMatcher
 
     private var state: State = .asleep
-    private var session: LiveSession?
+    private var session: VoiceLine?
     private var dialogue = Dialogue()
     /// How much of the dialogue the session has already been given.
     private var handedOver = 0
@@ -59,12 +59,15 @@ final class LiveConversation {
     private var answer: String?
     private var answerTimer: Timer?
     private var loggedLines = 0
+    /// A yes or no the session is waiting on, until it has been put to the user.
+    private var pendingQuestion: String?
 
-    init(settings: AssistantSettings, model: NotchModel, bridge: BridgeServer, key: String, engine: AVAudioEngine) {
+    /// - Parameter line: opens a new line to the voice model each time it wakes.
+    init(settings: AssistantSettings, model: NotchModel, bridge: BridgeServer, engine: AVAudioEngine, line: @escaping () -> VoiceLine) {
         self.settings = settings
         self.model = model
         self.bridge = bridge
-        self.key = key
+        makeLine = line
         matcher = WakeMatcher(name: settings.assistantName, aliases: settings.wakeAliases)
         ears = Ears(locale: Locale(identifier: settings.language),
                     contextWords: [settings.assistantName] + settings.wakeAliases,
@@ -154,7 +157,7 @@ final class LiveConversation {
         Task { @MainActor in
             do {
                 try await ears.start { note in Log.write(note) }
-                Log.write("live voice: listening for \"\(settings.assistantName)\", talk key \(settings.talkKey.display)")
+                Log.write("listening for \"\(settings.assistantName)\", talk key \(settings.talkKey.display)")
             } catch {
                 Log.write("cannot listen: \(error)")
             }
@@ -176,19 +179,19 @@ final class LiveConversation {
         ears.cancelSession()
         lastEngaged = Date()
 
-        let session = LiveSession()
+        let session = makeLine()
         self.session = session
         session.onStarted = { [weak self, weak session] in
             guard let self, let session, self.session === session else { return }
             self.state = .awake
-            Log.write("live session started")
+            Log.write("voice line open")
             if !self.dialogue.lines.isEmpty {
                 let earlier = Dialogue(lines: Array(self.dialogue.lines.suffix(12)))
-                session.remember("Earlier in this conversation:\n" + earlier.rendered(from: 0, voiceName: self.settings.assistantName))
+                session.remember("Earlier in this conversation:\n" + earlier.rendered(from: 0, voiceName: self.settings.assistantName), handOff: nil)
             }
             let queued = self.waitingToSay
             self.waitingToSay.removeAll()
-            queued.forEach { session.say($0, handOff: nil) }
+            queued.forEach { self.say($0) }
             self.refresh()
         }
         session.onAudio = { [weak self, weak session] bytes in
@@ -230,13 +233,23 @@ final class LiveConversation {
                 MainActor.assumeIsolated { self?.handOver(id) }
             }
         }
+        session.onCutIn = { [weak self, weak session] in
+            guard let self, self.session === session else { return }
+            if self.player.isPlaying { self.dialogue.markCutOff() }
+            self.player.flush()
+            self.refresh()
+        }
+        session.onDismissed = { [weak self, weak session] in
+            guard let self, self.session === session else { return }
+            self.sleep("told to stop")
+        }
         session.onEnded = { [weak self, weak session] asked in
             guard let self, self.session === session else { return }
-            if !asked { Log.write("live session ended on its own") }
+            if !asked { Log.write("voice line ended on its own") }
             self.session = nil
             self.settle()
         }
-        session.open(key: key, voice: settings.liveVoice, instructions: LivePersona.instructions(name: settings.assistantName))
+        session.open()
         ears.startStreaming(lead: byVoice) { [weak session] data in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { session?.sendAudio(data) }
@@ -319,6 +332,7 @@ final class LiveConversation {
                 // Its speech arrives about as fast as it is spoken, so there is
                 // only a moment of it queued here to throw away.
                 Log.write("cut off with the talk key")
+                session?.interrupt()
                 player.flush()
                 dialogue.markCutOff()
             } else {
@@ -355,7 +369,9 @@ final class LiveConversation {
         let message = "The voice handed this to you. What has been said since you were last asked:\n\(said)"
         if !bridge.send(.utterance(message, source: "voice")) {
             Log.write("no session attached")
-            session?.say("Tell them you are not hooked up to a Claude session right now.", handOff: id)
+            session?.say(session?.speaksWordForWord == true
+                ? "I'm not hooked up to a Claude session right now."
+                : "Tell them you are not hooked up to a Claude session right now.", handOff: id)
         }
     }
 
@@ -383,7 +399,9 @@ final class LiveConversation {
                 summary: ApprovalPhrase.summary(tool: tool, description: described, preview: preview),
                 preview: preview, clickOnly: false)
             answer = ""
-            say("Ask the user this, then wait for a yes or a no: " + ApprovalPhrase.spoken(tool: tool, description: described, preview: preview))
+            // The question is asked through whichever line is open, or the one about to be.
+            pendingQuestion = ApprovalPhrase.spoken(tool: tool, description: described, preview: preview)
+            say(pendingQuestion ?? "")
             refresh()
         case .utterance:
             // Typed in from the command line, for testing without a microphone.
@@ -396,7 +414,12 @@ final class LiveConversation {
     private func say(_ text: String) {
         lastEngaged = Date()
         if state == .awake, let session {
-            session.say(text, handOff: openHandOff)
+            // A model that retells what it is given has to be told that this
+            // one is a question to put, not a fact to pass on.
+            let isQuestion = text == pendingQuestion
+            if isQuestion { pendingQuestion = nil }
+            session.say(isQuestion && !session.speaksWordForWord ? "Ask the user this, then wait for a yes or a no: " + text : text,
+                        handOff: openHandOff)
         } else {
             waitingToSay.append(text)
             wake("the session has something to say")
@@ -429,7 +452,7 @@ final class LiveConversation {
         model.approval = nil
         answer = nil
         answerTimer?.invalidate()
-        session?.remember("The user answered \(allow ? "yes" : "no") to that request, and it has been \(allow ? "allowed" : "refused"). Do not ask again.")
+        session?.remember("The user answered \(allow ? "yes" : "no") to that request, and it has been \(allow ? "allowed" : "refused"). Do not ask again.", handOff: nil)
         refresh()
     }
 

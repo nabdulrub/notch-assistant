@@ -10,8 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: NotchModel?
     private var notch: NotchController?
     private var demoDriver: DemoDriver?
-    private var conversation: Conversation?
-    private var liveConversation: LiveConversation?
+    private var conversation: LiveConversation?
+    private var localModel: SophonServer?
     private var bridge: BridgeServer?
     private var statusItem: NSStatusItem?
 
@@ -46,11 +46,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if forceSetup || !settings.setupDone {
             showSetup()
         } else {
-            startConversation(settings)
+            startConversation(settings, setupIfNotReady: true)
         }
     }
 
-    private var isConversing: Bool { conversation != nil || liveConversation != nil }
+    func applicationWillTerminate(_ notification: Notification) {
+        // The model on this Mac holds a lot of memory; it goes when the app goes.
+        localModel?.stop()
+    }
+
+    private var isConversing: Bool { conversation != nil }
 
     @objc private func showSetup() {
         guard setup == nil else { return }
@@ -77,34 +82,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    private func startConversation(_ settings: AssistantSettings) {
+    /// - Parameter setupIfNotReady: open setup when the chosen voice cannot
+    ///   run yet. Not when setup has just been closed, or it would never close.
+    private func startConversation(_ settings: AssistantSettings, setupIfNotReady: Bool = false) {
         guard let model, let bridge, !isConversing else { return }
         model.assistantName = settings.assistantName
         SessionFiles.write(settings: settings)
 
-        // One engine for the microphone and the voice, so the echo canceller
-        // knows what is being played.
-        let engine = AVAudioEngine()
-        if settings.voiceEngine == "live" {
-            if let key = Secrets.openAIKey {
-                Log.write("voice: live")
-                let live = LiveConversation(settings: settings, model: model, bridge: bridge, key: key, engine: engine)
-                live.start()
-                liveConversation = live
+        let line: () -> VoiceLine
+        if settings.voiceEngine == "sophon" {
+            let server = SophonServer()
+            guard server.start(name: settings.assistantName) else {
+                Log.write("the voice on this Mac is not installed yet")
+                if setupIfNotReady { showSetup() }
                 return
             }
-            Log.write("the live voice needs an OpenAI key; using the local voice")
-        }
-        let system = SystemVoice()
-        let voice: Voice
-        if let key = Secrets.rimeKey {
-            voice = RimeVoice(key: key, speaker: settings.rimeSpeaker, language: settings.language, engine: engine, fallback: system)
-            Log.write("voice: Rime")
+            localModel = server
+            Log.write("voice: on this Mac")
+            line = { SophonSession(port: SophonServer.port) }
         } else {
-            voice = system
-            Log.write("voice: system (\(system.voiceName)); no Rime key stored")
+            // The live voice runs on the user's own OpenAI key. There is no
+            // shared one to fall back on.
+            guard let key = Secrets.openAIKey else {
+                Log.write("the live voice needs your own OpenAI key")
+                if setupIfNotReady { showSetup() }
+                return
+            }
+            Log.write("voice: live")
+            let voice = settings.liveVoice
+            let instructions = LivePersona.instructions(name: settings.assistantName)
+            line = { LiveSession(key: key, voice: voice, instructions: instructions) }
         }
-        let conversation = Conversation(settings: settings, model: model, bridge: bridge, voice: voice, engine: engine)
+        // One engine for the microphone and the voice, so the echo canceller
+        // knows what is being played.
+        let conversation = LiveConversation(settings: settings, model: model, bridge: bridge, engine: AVAudioEngine(), line: line)
         conversation.start()
         self.conversation = conversation
     }
@@ -146,8 +157,8 @@ enum SessionFiles {
                                             socketPath: UnixSocket.standardPath)
         try? FileManager.default.createDirectory(at: SettingsStore.standard.directory, withIntermediateDirectories: true)
         try? data.write(to: mcpConfig, options: .atomic)
-        let voiceLayer = settings.voiceEngine == "live" && Secrets.openAIKey != nil
-        try? Data(Persona.instructions(name: settings.assistantName, voiceLayer: voiceLayer).utf8).write(to: persona, options: .atomic)
+        let voice: Persona.VoiceLayer = settings.voiceEngine == "sophon" ? .wordForWord : .retold
+        try? Data(Persona.instructions(name: settings.assistantName, voice: voice).utf8).write(to: persona, options: .atomic)
     }
 
     static func session(settings: AssistantSettings) -> SessionCommand {
