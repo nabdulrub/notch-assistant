@@ -62,7 +62,7 @@ def control(text):
 # answers talk it cannot make out with this instead of staying out of it.
 UNHEARD = re.compile(
     r"\b(?:can(?:no|')?t|could ?n[o']t|did ?n[o']t|unable to|not sure i|having trouble|hard to)\b[^.?!]{0,24}"
-    r"\b(?:hear|hearing|catch|make out|got that|get that|understand you)\b"
+    r"\b(?:hear|hearing|catch|make out|got that|get that|understand|understanding)\b"
     r"|\bspeak up\b|\bspeak (?:a little |a bit )?louder\b|\b(?:say|repeat) that again\b")
 UNHEARD_LEAD = 48             # characters of a reply read before it is spoken, to tell
 
