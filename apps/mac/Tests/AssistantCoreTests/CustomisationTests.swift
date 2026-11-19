@@ -159,4 +159,15 @@ import Testing
         changed.personality = "x"
         #expect(!onDevice.needsRestart(toBecome: changed))
     }
+
+    @Test func onlyMyVoiceIsOnUnlessSwitchedOffAndNeedsARestartToChange() throws {
+        #expect(AssistantSettings().onlyMyVoice)
+        let old = try JSONDecoder().decode(AssistantSettings.self, from: Data(#"{"voiceEngine":"sophon"}"#.utf8))
+        #expect(old.onlyMyVoice)
+        var off = old
+        off.onlyMyVoice = false
+        #expect(old.needsRestart(toBecome: off))
+        let back = try JSONDecoder().decode(AssistantSettings.self, from: JSONEncoder().encode(off))
+        #expect(!back.onlyMyVoice)
+    }
 }

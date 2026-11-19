@@ -54,6 +54,8 @@ final class Ears: @unchecked Sendable {
     private static let streamLeadLimit = 24000 * 2 * 10
     private static let streamLeadIn = 24000
     private static let streamWakeLead = 24000 * 2 * 3
+    /// As much of the speech the name was in as a voice can be learned from.
+    private static let ownerLead = 24000 * 2 * 6
     private var converter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?
 
@@ -280,9 +282,16 @@ final class Ears: @unchecked Sendable {
     ///
     /// - Parameter lead: false when nobody spoke to wake it, so there is nothing
     ///   worth catching up on.
-    func startStreaming(lead: Bool, _ sink: @escaping (Data) -> Void) {
+    /// - Returns: the last few seconds heard before this, which is the speech
+    ///   the name was in when a voice woke it.
+    @discardableResult
+    func startStreaming(lead: Bool, _ sink: @escaping (Data) -> Void) -> Data {
         lock.lock()
         defer { lock.unlock() }
+        var heard = streamLead
+        var bytes = streamLeadBytes
+        while bytes > Ears.ownerLead, heard.count > 1 { bytes -= heard.removeFirst().count }
+        let before = heard.reduce(into: Data()) { $0.append($1) }
         if lead {
             // The name is in the last few seconds; older audio is the room.
             while streamLeadBytes > Ears.streamWakeLead, streamLead.count > 1 { streamLeadBytes -= streamLead.removeFirst().count }
@@ -291,6 +300,7 @@ final class Ears: @unchecked Sendable {
         streamLead.removeAll()
         streamLeadBytes = 0
         streamSink = sink
+        return before
     }
 
     func stopStreaming() {

@@ -88,6 +88,9 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
     /// Seconds of quiet before the line to the voice model is closed. OpenAI's
     /// is billed while open.
     public var liveIdle: Double
+    /// With the voice on this Mac: listen only to the voice that said the name,
+    /// and take anyone else, a television or a noise for the room.
+    public var onlyMyVoice: Bool
     /// How work is handed out to workers.
     public var delegation: Delegation
     /// Who it is and how it sounds, in the user's own words. Empty is the
@@ -101,7 +104,7 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
     public init(assistantName: String = "Jarvis", wakeAliases: [String] = [], talkKey: KeyCombo = .defaultTalk,
                 model: String = "sonnet", language: String = "en-US",
                 workingDirectory: String = "~/Desktop/dev", updateEvery: Double = 40,
-                voiceEngine: String = "live", liveVoice: String = "marin", liveIdle: Double = 15,
+                voiceEngine: String = "live", liveVoice: String = "marin", liveIdle: Double = 15, onlyMyVoice: Bool = true,
                 delegation: Delegation = Delegation(), personality: String = "", customInstructions: String = "",
                 setupDone: Bool = false) {
         self.assistantName = assistantName
@@ -114,6 +117,7 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
         self.voiceEngine = voiceEngine
         self.liveVoice = liveVoice
         self.liveIdle = liveIdle
+        self.onlyMyVoice = onlyMyVoice
         self.delegation = delegation
         self.personality = personality
         self.customInstructions = customInstructions
@@ -136,6 +140,7 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
         voiceEngine = try container.decodeIfPresent(String.self, forKey: .voiceEngine) == "sophon" ? "sophon" : "live"
         liveVoice = try container.decodeIfPresent(String.self, forKey: .liveVoice) ?? fallback.liveVoice
         liveIdle = try container.decodeIfPresent(Double.self, forKey: .liveIdle) ?? fallback.liveIdle
+        onlyMyVoice = try container.decodeIfPresent(Bool.self, forKey: .onlyMyVoice) ?? fallback.onlyMyVoice
         delegation = (try? container.decodeIfPresent(Delegation.self, forKey: .delegation)) ?? fallback.delegation
         personality = try container.decodeIfPresent(String.self, forKey: .personality) ?? fallback.personality
         customInstructions = try container.decodeIfPresent(String.self, forKey: .customInstructions) ?? fallback.customInstructions
@@ -147,7 +152,7 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
     public func needsRestart(toBecome other: AssistantSettings) -> Bool {
         assistantName != other.assistantName || wakeAliases != other.wakeAliases || talkKey != other.talkKey
             || language != other.language || updateEvery != other.updateEvery || voiceEngine != other.voiceEngine
-            || liveVoice != other.liveVoice || liveIdle != other.liveIdle
+            || liveVoice != other.liveVoice || liveIdle != other.liveIdle || onlyMyVoice != other.onlyMyVoice
             || (other.voiceEngine == "live" && personality != other.personality)
     }
 

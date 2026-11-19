@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let line: () -> VoiceLine
         if settings.voiceEngine == "sophon" {
             let server = SophonServer()
-            guard server.start(name: settings.assistantName) else {
+            guard server.start(name: settings.assistantName, onlyOwner: settings.onlyMyVoice) else {
                 Log.write("the voice on this Mac is not installed yet")
                 if setupIfNotReady { showSetup() }
                 return

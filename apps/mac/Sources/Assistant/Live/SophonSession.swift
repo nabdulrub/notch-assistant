@@ -68,6 +68,11 @@ final class SophonSession: VoiceLine {
     /// to put this. The session behind it is what remembers.
     func remember(_ text: String, handOff: String?) {}
 
+    func learnOwner(from pcm: Data) {
+        guard !pcm.isEmpty else { return }
+        send(["type": "owner", "pcm": pcm.base64EncodedString()])
+    }
+
     func setMuted(_ muted: Bool) {
         self.muted = muted
     }
@@ -159,6 +164,8 @@ final class SophonSession: VoiceLine {
             Log.write("kept quiet instead of saying: \(event["text"] as? String ?? "")")
         case "cut":
             if let said = event["said"] as? String { onCutHeard?(said) }
+        case "bystander":
+            Log.write("not the owner's voice (\(event["score"] as? Double ?? 0)); ignored")
         case "silent":
             Log.write("the voice stayed out of it")
             onNothingAsked?()
