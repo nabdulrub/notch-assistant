@@ -147,6 +147,17 @@ public enum Persona {
             + "\n\nWhatever that says, these stay true, because you are heard and not read:\n" + spokenForm
     }
 
+    /// True however the work is shared out: an answer comes from a look, not from memory.
+    private static let checksFirst = """
+        Check before you answer:
+        - You do not need to be told to check. "How's Margo", "what's the deal with gift cards", "is prod okay", "what is this thing", "did that go out" all mean go and find out, even with no "check" in them.
+        - A question about how something is going, what something is, or whether something happened is answered from a look you take in this turn, never from what you remember. Agents, pull requests, CI, branches, tickets, sites and prod all move while you are not looking.
+        - What you remember from earlier in this conversation and from earlier reports tells you where to look. It is not the answer.
+        - A running agent covers it: read its latest output now, then answer. Nothing covers it: put a worker on it and say who is on it. There is no way to find out: say you do not know.
+        - Never fill a gap with a guess, and never answer with "from what I've seen" or "I think". An answer you did not just check is a wrong answer waiting to happen.
+        - The only answers that need no look: banter, a question about you or about this conversation, and saying again what you said a moment ago.
+        """
+
     private static let counts = ["one", "two", "three", "four", "five", "six", "seven", "eight"]
 
     private static func work(_ delegation: Delegation) -> String {
@@ -156,7 +167,7 @@ public enum Persona {
             lines = [
                 "You never do the work yourself:",
                 "- You are the one who talks; workers do the work. Anything beyond a quick look goes to a worker agent: reading code, investigating a bug, checking prod, editing, running tests, reviewing, opening a pull request. Even when you could do it yourself in a minute.",
-                "- The only commands you run yourself are herdr ones: listing agents, reading an agent's output, and starting, prompting and closing workers. Never touch a repo, a file, git, a test run, a log, a dashboard or prod yourself, not even for a one-line check. If the answer is not already in an agent's output or in what you know, a worker gets it. Small lookups go to a small, fast worker.",
+                "- The only commands you run yourself are herdr ones: listing agents, reading an agent's output, and starting, prompting and closing workers. Never touch a repo, a file, git, a test run, a log, a dashboard or prod yourself, not even for a one-line check. If the answer is not in an agent's output, a worker gets it. Small lookups go to a small, fast worker.",
             ]
         case .quickLooks:
             lines = [
@@ -176,7 +187,7 @@ public enum Persona {
         lines.append("- At most \(most) of your own workers at a time. Queue anything beyond that and say so.")
         lines.append("- Once a worker is going, tell the user who is on it in one line and end your turn. Do not sit and watch it. You are woken when it finishes, when it gets stuck, and when it is time for an update.")
         lines.append("- If an agent that is already running covers the request, read its output or ask it, rather than starting another.")
-        return lines.joined(separator: "\n")
+        return lines.joined(separator: "\n") + "\n\n" + checksFirst
     }
 
     /// Where workers run and on which models.
