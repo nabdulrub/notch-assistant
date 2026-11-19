@@ -4,6 +4,8 @@ import Foundation
 /// hand-off is never met with silence.
 public struct WaitingLines: Sendable {
     public static let acknowledgements = ["On it.", "One sec.", "Let me check.", "Okay, looking.", "Yeah, give me a sec."]
+    /// Said when it is called by name and nothing is asked in the same breath.
+    public static let greetings = ["Yeah?", "What's up?", "I'm here."]
     public static let stillWorking = ["Still on it.", "Still looking, hang on.", "This one's taking a minute. Still on it."]
 
     private var last: Int?
@@ -17,6 +19,10 @@ public struct WaitingLines: Sendable {
         if index == last { index = (index + 1) % lines.count }
         last = index
         return lines[index]
+    }
+
+    public static func greeting(pick: (Int) -> Int = { Int.random(in: 0..<$0) }) -> String {
+        greetings[pick(greetings.count) % greetings.count]
     }
 
     /// Said when the answer is taking a while. They go in order, and the last one repeats.

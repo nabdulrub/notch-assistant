@@ -246,6 +246,10 @@ final class LiveConversation {
         ears.cancelSession()
         lastEngaged = Date()
 
+        // Called by name with nothing asked: the app answers, in the voice's
+        // words. The voice on this Mac is not left to answer its own name. What
+        // it says there is filler as often as not, and filler is not spoken.
+        let answersItsName = byVoice && request == nil && readsRequestsItself
         let session = makeLine()
         self.session = session
         session.onStarted = { [weak self, weak session] in
@@ -260,6 +264,11 @@ final class LiveConversation {
             self.waitingToSay.removeAll()
             queued.forEach { self.say($0) }
             if let request { self.take(request) }
+            if answersItsName {
+                let line = WaitingLines.greeting()
+                Log.write("answering its name: \(line)")
+                self.say(line)
+            }
             self.refresh()
         }
         session.onAudio = { [weak self, weak session] bytes in
@@ -345,7 +354,7 @@ final class LiveConversation {
         session.open()
         // With the request already in hand, the voice model is not given the
         // same words to answer a second time.
-        ears.startStreaming(lead: byVoice && request == nil) { [weak session] data in
+        ears.startStreaming(lead: byVoice && request == nil && !answersItsName) { [weak session] data in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { session?.sendAudio(data) }
             }

@@ -160,6 +160,7 @@ final class SophonSession: VoiceLine {
         case "cut":
             if let said = event["said"] as? String { onCutHeard?(said) }
         case "silent":
+            Log.write("the voice stayed out of it")
             onNothingAsked?()
         case "goodbye":
             onDismissed?()
