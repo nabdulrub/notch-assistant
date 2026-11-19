@@ -73,6 +73,7 @@ session. You can open it again from the eyes icon in the menu bar.
 
 - Say "Jarvis" and talk, or press Control Option Space.
 - Talk over it to interrupt. Say "bye" to send it back to sleep.
+- Or send it away without a word: click the notch, press the talk key again, or pick "Send to Sleep" from the eyes icon in the menu bar.
 - Opening the app twice by accident is fine. Only one copy ever runs.
 
 ## The herdr plugin
