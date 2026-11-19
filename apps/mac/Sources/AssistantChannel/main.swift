@@ -16,7 +16,10 @@ func argument(_ flag: String) -> String? {
 
 let assistantName = AssistantSettings.cleaned(name: argument("--name") ?? "Jarvis")
 let socketPath = argument("--socket") ?? UnixSocket.standardPath
-let server = ChannelServer(assistantName: assistantName)
+// The app writes the instructions the user's settings add up to; without the
+// file, the defaults.
+let written = argument("--persona").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }
+let server = ChannelServer(assistantName: assistantName, instructions: written.flatMap { $0.isEmpty ? nil : $0 })
 
 /// Stdout is shared by the reader loop and the socket thread; one line at a time.
 final class Output: @unchecked Sendable {
@@ -56,7 +59,7 @@ final class AppLink: @unchecked Sendable {
         return current?.send(message.encoded()) ?? false
     }
 
-    func run(onMessage: @escaping @Sendable (BridgeMessage) -> Void) {
+    func run(onMessage: @escaping @Sendable (BridgeMessage) -> Void, onDrop: @escaping @Sendable () -> Void) {
         let thread = Thread { [self] in
             while true {
                 guard let descriptor = UnixSocket.connect(path: path) else {
@@ -75,6 +78,7 @@ final class AppLink: @unchecked Sendable {
                 connection = nil
                 lock.unlock()
                 link.close()
+                onDrop()
                 Thread.sleep(forTimeInterval: 0.5)
             }
         }
@@ -83,19 +87,63 @@ final class AppLink: @unchecked Sendable {
     }
 }
 
+/// Looks the app has been asked for and has not answered. A tool call must
+/// always get an answer, so these are failed if the app goes away first.
+final class Looks: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiting: Set<String> = []
+
+    func asked(_ requestId: String) {
+        lock.lock()
+        waiting.insert(requestId)
+        lock.unlock()
+    }
+
+    func answered(_ requestId: String) {
+        lock.lock()
+        waiting.remove(requestId)
+        lock.unlock()
+    }
+
+    func takeAll() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        let all = Array(waiting)
+        waiting.removeAll()
+        return all
+    }
+}
+
 let output = Output()
 let app = AppLink(path: socketPath)
+let looks = Looks()
 
-app.run { message in
+func failLook(_ requestId: String) {
+    looks.answered(requestId)
+    let gone = BridgeMessage.noScreen(requestId: requestId, problem: "The \(assistantName) app went away before it could answer.")
+    if let line = server.notification(for: gone) { output.write(line) }
+}
+
+app.run(onMessage: { message in
+    if message.type == .screen, let requestId = message.requestId { looks.answered(requestId) }
     if let line = server.notification(for: message) {
         output.write(line)
     }
-}
+}, onDrop: {
+    looks.takeAll().forEach(failLook)
+})
 
 while let line = readLine(strippingNewline: true) {
     guard !line.isEmpty else { continue }
     let result = server.handle(line: Data(line.utf8), appConnected: app.isConnected)
-    for message in result.toApp { app.send(message) }
+    for message in result.toApp {
+        guard message.type == .look, let requestId = message.requestId else {
+            app.send(message)
+            continue
+        }
+        looks.asked(requestId)
+        if !app.send(message) { failLook(requestId) }
+    }
     for reply in result.replies { output.write(reply) }
 }
 exit(0)

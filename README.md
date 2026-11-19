@@ -69,10 +69,30 @@ xattr -dr com.apple.quarantine "/Applications/Notch Assistant.app" && open "/App
 Setup starts by itself: a name, the voice, the microphone, and the Claude Code
 session. You can open it again from the eyes icon in the menu bar.
 
+## Make it yours
+
+Settings is under the eyes icon in the menu bar, or Command Comma.
+
+- **Delegation.** How much it does itself: nothing, quick looks, or small jobs.
+  Which model its workers use for real work and for small jobs, where they run,
+  how many at once, and whether it asks before touching agents it did not start.
+- **Persona.** Who it is and how it sounds, in your own words. Start from the one
+  it ships with, or write your own.
+- **Instructions.** Your own rules, added after everything else it is told. Where
+  the two clash, yours win.
+- **The rest.** Its name, the talk key, the session folder, the voice, and how
+  often it speaks up while agents work.
+
+A session that is already running is sent its new instructions when you save, so
+there is nothing to start again. The model the session itself runs on changes
+the next time it starts.
+
 ## Using it
 
 - Say "Jarvis" and talk, or press Control Option Space.
 - Talk over it to interrupt. Say "bye" to send it back to sleep.
+- Or send it away without a word: click the notch, press the talk key again, or pick "Send to Sleep" from the eyes icon in the menu bar.
+- Ask about what is on your screen: "what's this error", "look at this". It takes one picture of the display your pointer is on, the notch says "Looking at your screen" while it does, and nothing is kept. macOS asks once for Screen Recording; it never looks unless you ask.
 - Opening the app twice by accident is fine. Only one copy ever runs.
 
 ## The herdr plugin

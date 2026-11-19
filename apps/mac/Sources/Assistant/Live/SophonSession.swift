@@ -153,6 +153,8 @@ final class SophonSession: VoiceLine {
             // summary of the request is the nearest thing there is.
             onUserText?(request)
             onHandOff?(id)
+        case "unheard":
+            Log.write("kept quiet instead of saying: \(event["text"] as? String ?? "")")
         case "goodbye":
             onDismissed?()
         case "interrupt":

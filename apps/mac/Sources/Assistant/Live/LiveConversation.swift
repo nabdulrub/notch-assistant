@@ -34,6 +34,10 @@ final class LiveConversation {
     /// How much of the dialogue the session has already been given.
     private var handedOver = 0
     private var openHandOff: String?
+    /// Set from the moment a request is handed over until the session has dealt
+    /// with it, so the silence in between can be filled.
+    private var wait: HandOffWait?
+    private var waitingLines = WaitingLines()
     private var waitingToSay: [String] = []
     /// When it last spoke, was handed something, or was given something to say.
     private var lastEngaged = Date()
@@ -53,9 +57,16 @@ final class LiveConversation {
     private var displayTimer: Timer?
     private var idleTimer: Timer?
     private var checkingForName = false
+    /// Set when the name turns up in a sentence that is still being said, for a
+    /// voice whose requests are read from the Mac's own transcription.
+    private var nameHeardAt: Date?
+    /// The longest a sentence is heard out after the name before it is taken as it stands.
+    private static let longestRequest: TimeInterval = 12
     private var userTalking = false
     private var sessionBusy = false
     private var note: String?
+    /// True while the screen is being shown to the session, and briefly after.
+    private var looking = false
     private var answer: String?
     private var answerTimer: Timer?
     private var loggedLines = 0
@@ -78,7 +89,9 @@ final class LiveConversation {
 
     func start() {
         bridge.onMessage = { [weak self] message in self?.received(message) }
+        bridge.onLook = { [weak self] requestId, answer in self?.look(requestId, answer: answer) }
         bridge.onSessionCount = { count in Log.write(count > 0 ? "session attached" : "session detached") }
+        model.onDismiss = { [weak self] in self?.dismiss(how: "a click on the notch") }
         model.onApproval = { [weak self] request, allow in self?.decide(request, allow: allow, how: "click") }
 
         relay.onSummary = { [weak self] summary in
@@ -91,6 +104,7 @@ final class LiveConversation {
             if !busy {
                 self.note = nil
                 self.openHandOff = nil
+                self.wait = nil
             }
             self.refresh()
         }
@@ -136,13 +150,32 @@ final class LiveConversation {
         ears.onVoice = { [weak self] speaking in self?.voice(speaking) }
         ears.onHeard = { [weak self] text in
             guard let self, self.state == .asleep, let match = self.matcher.match(text), match.leadsWithName else { return }
+            if self.readsRequestsItself {
+                // Hear the sentence out: what follows the name is the request.
+                if self.nameHeardAt == nil {
+                    self.nameHeardAt = Date()
+                    self.refresh()
+                }
+                return
+            }
             self.wake("heard its name", byVoice: true)
         }
         ears.onEnded = { [weak self] text in
             guard let self else { return }
             self.checkingForName = false
             guard self.state == .asleep else { return }
+            let named = self.nameHeardAt != nil
+            self.nameHeardAt = nil
             if let match = self.matcher.match(text), match.leadsWithName || match.endsWithName {
+                let request = self.readsRequestsItself ? match.requestInTheSameBreath : nil
+                if let request, Dismissal.matches(request) {
+                    // Told to go away while already asleep.
+                    self.refresh()
+                } else {
+                    self.wake("heard its name", byVoice: true, request: request)
+                }
+            } else if named {
+                // The name was there while they spoke and the finished words lost it.
                 self.wake("heard its name", byVoice: true)
             } else if !text.isEmpty {
                 let words = text.split(separator: " ").count
@@ -151,7 +184,11 @@ final class LiveConversation {
         }
 
         idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkIdle() }
+            MainActor.assumeIsolated {
+                self?.checkWaiting()
+                self?.checkNameHeard()
+                self?.checkIdle()
+            }
         }
 
         Task { @MainActor in
@@ -166,8 +203,24 @@ final class LiveConversation {
 
     // MARK: Waking and sleeping
 
-    private func wake(_ why: String, byVoice: Bool = false) {
+    /// The small model on this Mac is handed the words that woke it as a clipped
+    /// burst and often cannot make them out, while the Mac's own transcription
+    /// has just heard them well enough to find the name. So for that voice, a
+    /// request said along with the name is read from the transcription.
+    private var readsRequestsItself: Bool { settings.voiceEngine == "sophon" }
+
+    /// A sentence that never seems to end, in a loud room, is taken as it stands.
+    private func checkNameHeard() {
+        guard state == .asleep, let since = nameHeardAt, Date().timeIntervalSince(since) > Self.longestRequest else { return }
+        checkingForName = false
+        ears.stopSession()
+    }
+
+    /// - Parameter request: what was asked in the same breath as the name, when
+    ///   the transcription is trusted with it. It goes straight to the session.
+    private func wake(_ why: String, byVoice: Bool = false, request: String? = nil) {
         guard state == .asleep else { return }
+        nameHeardAt = nil
         Log.write("waking: \(why)")
         state = .connecting
         openedAt = Date()
@@ -192,6 +245,7 @@ final class LiveConversation {
             let queued = self.waitingToSay
             self.waitingToSay.removeAll()
             queued.forEach { self.say($0) }
+            if let request { self.take(request) }
             self.refresh()
         }
         session.onAudio = { [weak self, weak session] bytes in
@@ -209,7 +263,8 @@ final class LiveConversation {
             self.logFinishedLines()
             self.lastWords = Date()
             if let said = self.dialogue.latest(.user)?.text, Dismissal.matches(said) {
-                self.sleep("told to stop")
+                self.wait = nil
+            self.sleep("told to stop")
                 return
             }
             self.collectAnswer(text)
@@ -220,6 +275,7 @@ final class LiveConversation {
             self.dialogue.append(.voice, text)
             self.logFinishedLines()
             self.lastEngaged = Date()
+            self.wait?.heard(at: Date())
             self.relay.spoke()
             self.refresh()
         }
@@ -227,6 +283,7 @@ final class LiveConversation {
             guard let self, self.session === session else { return }
             self.openHandOff = id
             self.lastEngaged = Date()
+            self.acknowledge(id, on: session)
             self.refresh()
             // The hand-off carries no words, and the transcript trails the audio.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
@@ -250,7 +307,9 @@ final class LiveConversation {
             self.settle()
         }
         session.open()
-        ears.startStreaming(lead: byVoice) { [weak session] data in
+        // With the request already in hand, the voice model is not given the
+        // same words to answer a second time.
+        ears.startStreaming(lead: byVoice && request == nil) { [weak session] data in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { session?.sendAudio(data) }
             }
@@ -323,6 +382,52 @@ final class LiveConversation {
         }
     }
 
+    /// The moment a request is handed over, the user hears that it was taken. A
+    /// voice that retells what it is given says so itself; one that speaks word
+    /// for word hands over without a sound, so the line is given to it.
+    private func acknowledge(_ id: String, on session: VoiceLine?) {
+        let now = Date()
+        wait = HandOffWait(at: now)
+        guard let session, session.speaksWordForWord else { return }
+        // It may have said something of its own on the way to the hand-off.
+        if player.isPlaying || now.timeIntervalSince(lastPlayedAt) < 1.5 { return }
+        let line = waitingLines.acknowledgement()
+        Log.write("acknowledging: \(line)")
+        session.say(line, handOff: id)
+    }
+
+    /// While the session is still on a request and the user has heard nothing
+    /// for a while, say that the work is still going. Never over the user, and
+    /// never while it is waiting for a yes or a no.
+    private func checkWaiting() {
+        guard var waiting = wait else { return }
+        let now = Date()
+        if player.isPlaying {
+            waiting.heard(at: now)
+            wait = waiting
+            return
+        }
+        guard model.approval == nil, !userTalking, now.timeIntervalSince(lastWords) > 2, waiting.updateDue(at: now) else { return }
+        let line = WaitingLines.stillWorking(waiting.updates)
+        waiting.updated(at: now)
+        wait = waiting
+        Log.write("still waiting on the session: \(line)")
+        say(line)
+    }
+
+    /// Sends it back to sleep without a word: a click on the notch, or the menu.
+    /// Saying bye depends on the voice model catching it, and this does not.
+    func dismiss(how: String) {
+        guard state != .asleep else { return }
+        if player.isPlaying {
+            session?.interrupt()
+            player.flush()
+            dialogue.markCutOff()
+        }
+        wait = nil
+        sleep("sent away with \(how)")
+    }
+
     private func talkKey() {
         switch state {
         case .asleep:
@@ -361,6 +466,19 @@ final class LiveConversation {
 
     // MARK: To and from the Claude session
 
+    /// A request read from the Mac's transcription, handed over without the voice
+    /// model having to understand it.
+    private func take(_ request: String) {
+        Log.write("heard with the name: \(request)")
+        dialogue.append(.user, request)
+        logFinishedLines()
+        let id = "heard-" + UUID().uuidString.prefix(8).lowercased()
+        openHandOff = id
+        lastEngaged = Date()
+        acknowledge(id, on: session)
+        handOver(id)
+    }
+
     private func handOver(_ id: String) {
         guard openHandOff == id else { return }
         let said = dialogue.rendered(from: handedOver, voiceName: settings.assistantName)
@@ -369,9 +487,37 @@ final class LiveConversation {
         let message = "The voice handed this to you. What has been said since you were last asked:\n\(said)"
         if !bridge.send(.utterance(message, source: "voice")) {
             Log.write("no session attached")
+            wait = nil
             session?.say(session?.speaksWordForWord == true
                 ? "I'm not hooked up to a Claude session right now."
                 : "Tell them you are not hooked up to a Claude session right now.", handOff: id)
+        }
+    }
+
+    private static let lookingLabel = "Looking at your screen"
+
+    /// The session asked to see the screen. The notch says so for as long as it
+    /// takes and a moment after, so a look never goes unnoticed.
+    private func look(_ requestId: String, answer: @escaping @Sendable (BridgeMessage) -> Void) {
+        Log.write("the session asked to see the screen")
+        note = Self.lookingLabel
+        looking = true
+        refresh()
+        Task { @MainActor [weak self] in
+            do {
+                let jpeg = try await ScreenEye.look()
+                Log.write("sent it the screen, \(jpeg.count / 1024) KB")
+                answer(.screen(requestId: requestId, jpeg: jpeg))
+            } catch {
+                let problem = (error as? ScreenEye.Problem) ?? .nothingToSee
+                Log.write("could not show it the screen: \(problem)")
+                answer(.noScreen(requestId: requestId, problem: problem.explanation))
+            }
+            try? await Task.sleep(for: .seconds(3))
+            guard let self else { return }
+            self.looking = false
+            if self.note == Self.lookingLabel { self.note = nil }
+            self.refresh()
         }
     }
 
@@ -382,6 +528,9 @@ final class LiveConversation {
             guard !text.isEmpty else { return }
             Log.write("to say: \(text)")
             relay.spoke()
+            // Mid-turn this is an update and the wait goes on. Where the session
+            // cannot be seen working, its first word is taken as the answer.
+            if sessionBusy { wait?.heard(at: Date()) } else { wait = nil }
             say(text)
         case .show:
             let title = (message.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -408,7 +557,7 @@ final class LiveConversation {
             bridge.send(.utterance(message.text ?? "", source: "typed"))
         case .nudge:
             relay.lookNow()
-        case .hello, .event, .permissionVerdict:
+        case .hello, .event, .permissionVerdict, .look, .screen:
             break
         }
     }
@@ -473,8 +622,14 @@ final class LiveConversation {
         var progress: Int?
         switch state {
         case .asleep:
-            phase = sessionBusy ? .thinking : .asleep
-            if sessionBusy { caption = note ?? "Working on it" }
+            if nameHeardAt != nil {
+                // Its name was said and the sentence is still going.
+                phase = .listening
+                caption = Self.listeningLabel
+            } else {
+                phase = sessionBusy ? .thinking : .asleep
+                if sessionBusy { caption = note ?? "Working on it" }
+            }
         case .connecting:
             phase = .listening
         case .awake:
@@ -499,6 +654,12 @@ final class LiveConversation {
                 phase = talking ? .listening : .followUp
                 caption = talking ? Self.listeningLabel : nil
             }
+        }
+        // A look at the screen is always said, whatever else is going on, short
+        // of the assistant's own words.
+        if looking, phase != .speaking {
+            phase = .thinking
+            caption = Self.lookingLabel
         }
         if model.phase != phase { model.phase = phase }
         if model.caption != caption { model.caption = caption }

@@ -30,6 +30,8 @@ struct IslandView: View {
         .frame(width: size.width, height: size.height, alignment: .top)
         .background(shape.fill(Color.black))
         .clipShape(shape)
+        .contentShape(shape)
+        .onTapGesture { model.dismiss() }
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: content)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }

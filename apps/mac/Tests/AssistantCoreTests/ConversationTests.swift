@@ -179,10 +179,10 @@ import Testing
         #expect((echoed["result"] as? [String: Any])?["protocolVersion"] as? String == "2025-11-25")
     }
 
-    @Test func listsBothTools() {
+    @Test func listsItsTools() {
         let reply = object(send(#"{"jsonrpc":"2.0","id":"a","method":"tools/list"}"#).replies[0])
         let tools = (reply["result"] as? [String: Any])?["tools"] as? [[String: Any]] ?? []
-        #expect(tools.compactMap { $0["name"] as? String } == ["speak", "show"])
+        #expect(tools.compactMap { $0["name"] as? String } == ["speak", "show", "look"])
         #expect(reply["id"] as? String == "a")
     }
 
@@ -253,7 +253,7 @@ import Testing
         #expect(!command.arguments.contains("-p"))
         #expect(!command.arguments.contains("--print"))
         #expect(command.arguments.contains("server:voice"))
-        #expect(command.arguments.contains("mcp__voice__speak,mcp__voice__show"))
+        #expect(command.arguments.contains("mcp__voice__speak,mcp__voice__show,mcp__voice__look"))
         #expect(command.shellLine.contains("'/Users/x/Library/Application Support/NotchAssistant/mcp.json'"))
     }
 

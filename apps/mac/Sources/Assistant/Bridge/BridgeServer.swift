@@ -11,6 +11,9 @@ final class BridgeServer: @unchecked Sendable {
     /// Called on the main thread.
     var onMessage: (@MainActor (BridgeMessage) -> Void)?
     var onSessionCount: (@MainActor (Int) -> Void)?
+    /// A session asked to see the screen. The answer goes back to that session
+    /// only: another one would take it for the answer to a call of its own.
+    var onLook: (@MainActor (_ requestId: String, _ answer: @escaping @Sendable (BridgeMessage) -> Void) -> Void)?
 
     init(path: String = UnixSocket.standardPath) {
         self.path = path
@@ -39,6 +42,14 @@ final class BridgeServer: @unchecked Sendable {
                 guard let self, let message = BridgeMessage.decode(line) else { return }
                 if message.type == .hello {
                     self.setSession(connection, attached: true)
+                    return
+                }
+                if message.type == .look, let requestId = message.requestId {
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            self.onLook?(requestId) { answer in _ = connection.send(answer.encoded()) }
+                        }
+                    }
                     return
                 }
                 DispatchQueue.main.async {
