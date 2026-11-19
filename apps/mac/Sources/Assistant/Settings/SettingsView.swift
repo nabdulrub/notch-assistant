@@ -127,6 +127,14 @@ struct SettingsView: View {
                         .fixedSize()
                     }
                 }
+                if model.draft.voiceEngine == "sophon" {
+                    row("Only my voice", "It learns the voice that says its name and takes anyone else, a television or a noise for the room. Needs the speaker model next to the voice model.") {
+                        Toggle("Only my voice", isOn: $model.draft.onlyMyVoice)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .tint(.white.opacity(0.5))
+                    }
+                }
                 row("Goes back to sleep after", "How long it waits in silence before it stops listening.") {
                     seconds($model.draft.liveIdle, [10, 15, 20, 30, 60], off: nil)
                 }

@@ -65,6 +65,8 @@ final class LiveConversation {
     /// Set when the name turns up in a sentence that is still being said, for a
     /// voice whose requests are read from the Mac's own transcription.
     private var nameHeardAt: Date?
+    /// The audio the name was heard in, until the voice line is open to take it.
+    private var nameAudio: Data?
     /// When the sentence with the name in it last grew, and how long it was then.
     private var nameWords: (count: Int, at: Date) = (0, .distantPast)
     private var lastTalkingAt = Date.distantPast
@@ -246,6 +248,10 @@ final class LiveConversation {
         ears.cancelSession()
         lastEngaged = Date()
 
+        // Called by name with nothing asked: the app answers, in the voice's
+        // words. The voice on this Mac is not left to answer its own name. What
+        // it says there is filler as often as not, and filler is not spoken.
+        let answersItsName = byVoice && request == nil && readsRequestsItself
         let session = makeLine()
         self.session = session
         session.onStarted = { [weak self, weak session] in
@@ -259,7 +265,16 @@ final class LiveConversation {
             let queued = self.waitingToSay
             self.waitingToSay.removeAll()
             queued.forEach { self.say($0) }
+            if let heard = self.nameAudio {
+                self.nameAudio = nil
+                session.learnOwner(from: heard)
+            }
             if let request { self.take(request) }
+            if answersItsName {
+                let line = WaitingLines.greeting()
+                Log.write("answering its name: \(line)")
+                self.say(line)
+            }
             self.refresh()
         }
         session.onAudio = { [weak self, weak session] bytes in
@@ -345,11 +360,13 @@ final class LiveConversation {
         session.open()
         // With the request already in hand, the voice model is not given the
         // same words to answer a second time.
-        ears.startStreaming(lead: byVoice && request == nil) { [weak session] data in
+        let heard = ears.startStreaming(lead: byVoice && request == nil && !answersItsName) { [weak session] data in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { session?.sendAudio(data) }
             }
         }
+        // Whoever said the name is who it listens to.
+        if byVoice { nameAudio = heard }
         refresh()
     }
 

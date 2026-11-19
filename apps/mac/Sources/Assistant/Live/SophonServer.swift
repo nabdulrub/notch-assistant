@@ -54,7 +54,8 @@ final class SophonServer {
 
     private var process: Process?
 
-    func start(name: String) -> Bool {
+    /// - Parameter onlyOwner: listen only to the voice that said the name, where the speaker model is installed.
+    func start(name: String, onlyOwner: Bool = true) -> Bool {
         guard process == nil else { return true }
         guard let install = Self.install(), let bridge = Self.bridge else { return false }
         let directory = SettingsStore.standard.directory
@@ -69,7 +70,7 @@ final class SophonServer {
         task.arguments = [
             bridge.path, "--app", install.app.path, "--root", install.models.path, "--prompt", prompt.path,
             "--port", String(Self.port), "--parent", String(ProcessInfo.processInfo.processIdentifier),
-        ]
+        ] + (onlyOwner ? [] : ["--any-voice"])
         task.currentDirectoryURL = directory
         if let output = try? FileHandle(forWritingTo: log) {
             task.standardOutput = output
