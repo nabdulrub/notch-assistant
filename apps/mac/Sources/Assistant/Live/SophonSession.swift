@@ -12,6 +12,8 @@ final class SophonSession: VoiceLine {
     var onVoiceText: ((String) -> Void)?
     var onHandOff: ((String) -> Void)?
     var onCutIn: (() -> Void)?
+    var onCutHeard: ((String) -> Void)?
+    var onNothingAsked: (() -> Void)?
     var onDismissed: (() -> Void)?
     var onEnded: ((Bool) -> Void)?
 
@@ -155,6 +157,10 @@ final class SophonSession: VoiceLine {
             onHandOff?(id)
         case "unheard":
             Log.write("kept quiet instead of saying: \(event["text"] as? String ?? "")")
+        case "cut":
+            if let said = event["said"] as? String { onCutHeard?(said) }
+        case "silent":
+            onNothingAsked?()
         case "goodbye":
             onDismissed?()
         case "interrupt":

@@ -14,6 +14,12 @@ protocol VoiceLine: AnyObject {
     var onHandOff: ((String) -> Void)? { get set }
     /// The user cut in: speech that has not been played yet is to be dropped.
     var onCutIn: (() -> Void)? { get set }
+    /// With a cut-in, from a voice that knows: the part of its line that had
+    /// been spoken when it was cut off.
+    var onCutHeard: ((String) -> Void)? { get set }
+    /// From a voice that says so: it heard a turn and found nothing in it to
+    /// answer. A noise, or talk that was not meant for it.
+    var onNothingAsked: (() -> Void)? { get set }
     /// The user sent it away.
     var onDismissed: (() -> Void)? { get set }
     /// Called once, however it ended. The flag is true when that was asked for.
