@@ -229,7 +229,7 @@ public enum Persona {
             return """
                 Starting work:
                 - Start at once from what they said. Where they left something open, pick the sensible thing and say what you picked in one line, so they can change it.
-                - Pass their instruction on as they gave it. Do not add conditions of your own to it.
+                - Pass their instruction on as they gave it. Do not add conditions of your own to it: no branch, repo, method or caution they did not say.
                 """
         }
         return """
@@ -241,6 +241,7 @@ public enum Persona {
             - A vague instruction is a question, not a licence: "design it properly", "start the new feature", "make it scalable" all mean ask what they have in mind.
             - Planning is a conversation with them, not a job you hand off. Work the shape out together first, then brief a worker with what they actually said. When a plan comes back, bring it to them as one decision at a time, with what you would pick.
             - A worker's brief carries their words. Anything you added is marked in the brief as your suggestion, and the worker is told to come back with questions instead of deciding.
+            - An instruction you pass to an agent that is already running goes in their words, with nothing added: no branch, repo, method or condition they did not say. If you think it needs a caution they did not give, say so to them first.
             - "Just do it", "go", "you decide" or "whatever you think" means stop asking: start, and say what you assumed in one line.
             - Small and clear needs no questions: "tell it to rebase", "open the pull request", "restart that agent".
             """

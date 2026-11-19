@@ -33,6 +33,7 @@ import Testing
 
     @Test func eitherWayItDoesNotAddConditionsOfItsOwn() {
         #expect(prompt().contains("Anything you added is marked in the brief as your suggestion"))
+        #expect(prompt().contains("goes in their words, with nothing added"))
         #expect(prompt { $0.delegation.talksItThrough = false }.contains("Do not add conditions of your own"))
     }
 
