@@ -50,8 +50,6 @@ final class LiveConversation {
     /// not flick the notch to another state and back.
     private var lastPlayedAt = Date.distantPast
     private var playingSince: Date?
-    /// How long words in the room can hold a session open past its quiet limit.
-    private static let longestWait: TimeInterval = 20
     /// The last thing the session gave the voice to say, and how often it has
     /// been picked back up after a cut-in.
     private var given: (text: String, at: Date, resumes: Int)?
@@ -59,7 +57,6 @@ final class LiveConversation {
     private var held: HeldLine?
     /// What the voice said it had spoken when it was last cut off.
     private var cutHeard: (text: String, at: Date)?
-    private var lastTalkingAt = Date.distantPast
     /// Which of its lines the caption is following, and since when.
     private var following: (index: Int, since: Date)?
     private var displayTimer: Timer?
@@ -68,8 +65,11 @@ final class LiveConversation {
     /// Set when the name turns up in a sentence that is still being said, for a
     /// voice whose requests are read from the Mac's own transcription.
     private var nameHeardAt: Date?
-    /// The longest a sentence is heard out after the name before it is taken as it stands.
-    private static let longestRequest: TimeInterval = 12
+    /// When the sentence with the name in it last grew, and how long it was then.
+    private var nameWords: (count: Int, at: Date) = (0, .distantPast)
+    private var lastTalkingAt = Date.distantPast
+    /// Set when the voice is given something to say, until its sound starts.
+    private var speechDueUntil: Date?
     private var userTalking = false
     private var sessionBusy = false
     private var note: String?
@@ -137,6 +137,7 @@ final class LiveConversation {
         player.onPlaying = { [weak self] playing in
             guard let self else { return }
             self.lastEngaged = Date()
+            if playing { self.speechDueUntil = nil }
             if !playing { self.lastPlayedAt = Date() }
             self.playingSince = playing ? Date() : nil
             if self.ears.cancelsEcho {
@@ -160,6 +161,8 @@ final class LiveConversation {
             guard let self, self.state == .asleep, let match = self.matcher.match(text), match.leadsWithName else { return }
             if self.readsRequestsItself {
                 // Hear the sentence out: what follows the name is the request.
+                let words = text.split(whereSeparator: { $0.isWhitespace }).count
+                if words != self.nameWords.count { self.nameWords = (words, Date()) }
                 if self.nameHeardAt == nil {
                     self.nameHeardAt = Date()
                     self.refresh()
@@ -218,9 +221,11 @@ final class LiveConversation {
     /// request said along with the name is read from the transcription.
     private var readsRequestsItself: Bool { settings.voiceEngine == "sophon" }
 
-    /// A sentence that never seems to end, in a loud room, is taken as it stands.
+    /// A long request is heard out for as long as the words keep coming. A
+    /// sentence that never seems to end, in a loud room, is taken as it stands.
     private func checkNameHeard() {
-        guard state == .asleep, let since = nameHeardAt, Date().timeIntervalSince(since) > Self.longestRequest else { return }
+        guard state == .asleep, let since = nameHeardAt,
+              NameRequest.isTaken(at: Date(), nameHeardAt: since, lastNewWords: nameWords.at) else { return }
         checkingForName = false
         ears.stopSession()
     }
@@ -402,15 +407,19 @@ final class LiveConversation {
             if now.timeIntervalSince(openedAt) > 15 { sleep("could not connect") }
             return
         }
-        if player.isPlaying || model.approval != nil {
+        // Only silence counts. Not the time it spends talking, or is about to...
+        let aboutToSpeak = !waitingToSay.isEmpty || held != nil || (speechDueUntil.map { now < $0 } ?? false)
+        if player.isPlaying || aboutToSpeak || model.approval != nil {
             lastEngaged = now
             return
         }
-        let quiet = now.timeIntervalSince(lastEngaged)
-        // Someone mid-sentence is heard out, but a room that never stops
-        // talking does not get to keep the line open.
-        if quiet > settings.liveIdle, now.timeIntervalSince(lastWords) > 1.5 || quiet > settings.liveIdle + Self.longestWait {
-            sleep("quiet for \(Int(now.timeIntervalSince(lastEngaged)))s")
+        // ...and not the time the user does. The voice on this Mac gives no
+        // words for what it hears, so there the loudness of the room is what
+        // says someone is talking; a billed line goes by words alone.
+        var lastUserSound = lastWords
+        if readsRequestsItself { lastUserSound = max(lastUserSound, userTalking ? now : lastTalkingAt) }
+        if QuietRule(idle: settings.liveIdle).isOver(at: now, lastEngaged: lastEngaged, lastUserSound: lastUserSound) {
+            sleep("quiet for \(Int(now.timeIntervalSince(max(lastEngaged, lastUserSound))))s")
         }
     }
 
@@ -656,6 +665,7 @@ final class LiveConversation {
             if isQuestion { pendingQuestion = nil }
             session.say(isQuestion && !session.speaksWordForWord ? "Ask the user this, then wait for a yes or a no: " + text : text,
                         handOff: openHandOff)
+            speechDueUntil = Date().addingTimeInterval(8)
         } else {
             waitingToSay.append(text)
             wake("the session has something to say")
