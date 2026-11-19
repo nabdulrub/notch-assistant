@@ -52,6 +52,14 @@ final class LiveConversation {
     private var playingSince: Date?
     /// How long words in the room can hold a session open past its quiet limit.
     private static let longestWait: TimeInterval = 20
+    /// The last thing the session gave the voice to say, and how often it has
+    /// been picked back up after a cut-in.
+    private var given: (text: String, at: Date, resumes: Int)?
+    /// A line of the session's that a sound cut off, waiting to be picked back up.
+    private var held: HeldLine?
+    /// What the voice said it had spoken when it was last cut off.
+    private var cutHeard: (text: String, at: Date)?
+    private var lastTalkingAt = Date.distantPast
     /// Which of its lines the caption is following, and since when.
     private var following: (index: Int, since: Date)?
     private var displayTimer: Timer?
@@ -186,6 +194,7 @@ final class LiveConversation {
         idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.checkWaiting()
+                self?.checkHeld()
                 self?.checkNameHeard()
                 self?.checkIdle()
             }
@@ -262,6 +271,8 @@ final class LiveConversation {
             self.dialogue.append(.user, text)
             self.logFinishedLines()
             self.lastWords = Date()
+            // They said something: what was cut off stays cut off.
+            self.held = nil
             if let said = self.dialogue.latest(.user)?.text, Dismissal.matches(said) {
                 self.wait = nil
             self.sleep("told to stop")
@@ -272,6 +283,8 @@ final class LiveConversation {
         }
         session.onVoiceText = { [weak self, weak session] text in
             guard let self, self.session === session else { return }
+            // The voice picking its line up by itself is not said a second time.
+            if let held = self.held, Resumption.isSameLine(text, held: held.text) { self.held = nil }
             self.dialogue.append(.voice, text)
             self.logFinishedLines()
             self.lastEngaged = Date()
@@ -283,6 +296,7 @@ final class LiveConversation {
             guard let self, self.session === session else { return }
             self.openHandOff = id
             self.lastEngaged = Date()
+            self.held = nil
             self.acknowledge(id, on: session)
             self.refresh()
             // The hand-off carries no words, and the transcript trails the audio.
@@ -292,9 +306,26 @@ final class LiveConversation {
         }
         session.onCutIn = { [weak self, weak session] in
             guard let self, self.session === session else { return }
-            if self.player.isPlaying { self.dialogue.markCutOff() }
+            if self.player.isPlaying {
+                self.dialogue.markCutOff()
+                self.hold()
+            }
             self.player.flush()
             self.refresh()
+        }
+        session.onCutHeard = { [weak self, weak session] said in
+            guard let self, self.session === session else { return }
+            self.cutHeard = (said, Date())
+            // The cut-in itself may have come first, with only a guess at how far it got.
+            if let held = self.held, Date().timeIntervalSince(held.cutAt) < 1, let given = self.given,
+               let rest = Resumption.rest(of: given.text, heard: said) {
+                if rest.isEmpty { self.held = nil } else { self.held?.text = rest }
+            }
+        }
+        session.onNothingAsked = { [weak self, weak session] in
+            guard let self, self.session === session, let held = self.held, !self.player.isPlaying else { return }
+            // What cut it off was not a request.
+            self.pickUp(held)
         }
         session.onDismissed = { [weak self, weak session] in
             guard let self, self.session === session else { return }
@@ -346,6 +377,7 @@ final class LiveConversation {
         ears.stopStreaming()
         player.flush()
         ears.setMode(.open)
+        held = nil
         state = .asleep
         openHandOff = nil
         userTalking = false
@@ -415,6 +447,53 @@ final class LiveConversation {
         say(line)
     }
 
+    /// A sound cut off something the session gave the voice to say. It is kept:
+    /// a cough is not a request. What they went on to say drops it, and so
+    /// does sending the assistant away; quiet brings it back.
+    private func hold() {
+        guard let given, let session, Date().timeIntervalSince(given.at) < 40, given.resumes < HeldLine.mostResumes else { return }
+        let now = Date()
+        var rest = given.text
+        var index: Int?
+        if session.speaksWordForWord {
+            // Only when that line is the one being spoken, and from the
+            // sentence the cut fell in.
+            guard let line = dialogue.latest(.voice), let found = line.text.range(of: given.text) else { return }
+            index = line.index
+            let before = line.text[..<found.lowerBound].split(whereSeparator: { $0.isWhitespace }).count
+            let started = following?.index == line.index ? following?.since : playingSince
+            let spoken = Resumption.wordsHeard(after: now.timeIntervalSince(started ?? now), wordsPerSecond: Self.readingPace)
+            rest = Resumption.rest(of: given.text, heardWords: max(0, spoken - before))
+            // The voice's own word for how far it got beats the guess.
+            if let heard = cutHeard, now.timeIntervalSince(heard.at) < 1, let exact = Resumption.rest(of: given.text, heard: heard.text) {
+                rest = exact
+            }
+        }
+        guard !rest.isEmpty else { return }
+        held = HeldLine(text: rest, cutAt: now, line: index)
+        Log.write("cut off by a sound; holding the rest of the line")
+    }
+
+    /// Picks a held line back up once it is clear that nothing was asked.
+    private func checkHeld() {
+        guard let held, state == .awake, session != nil else { return }
+        let now = Date()
+        let busy = userTalking || player.isPlaying
+        guard held.due(at: now, lastSound: max(lastTalkingAt, lastPlayedAt), busy: busy), !player.isPlaying else { return }
+        pickUp(held)
+    }
+
+    private func pickUp(_ line: HeldLine) {
+        guard let session else { return }
+        held = nil
+        if let index = line.line { dialogue.heardAfterAll(index) }
+        given = (line.text, Date(), (given?.resumes ?? 0) + 1)
+        lastEngaged = Date()
+        Log.write("picking the line back up: \(line.text)")
+        session.say(session.speaksWordForWord ? line.text : "A noise cut you off before you finished. Say this again: " + line.text,
+                    handOff: openHandOff)
+    }
+
     /// Sends it back to sleep without a word: a click on the notch, or the menu.
     /// Saying bye depends on the voice model catching it, and this does not.
     func dismiss(how: String) {
@@ -437,6 +516,7 @@ final class LiveConversation {
                 // Its speech arrives about as fast as it is spoken, so there is
                 // only a moment of it queued here to throw away.
                 Log.write("cut off with the talk key")
+                held = nil
                 session?.interrupt()
                 player.flush()
                 dialogue.markCutOff()
@@ -449,6 +529,7 @@ final class LiveConversation {
     // MARK: Microphone
 
     private func voice(_ speaking: Bool) {
+        if userTalking || speaking { lastTalkingAt = Date() }
         userTalking = speaking
         switch state {
         case .asleep:
@@ -531,6 +612,9 @@ final class LiveConversation {
             // Mid-turn this is an update and the wait goes on. Where the session
             // cannot be seen working, its first word is taken as the answer.
             if sessionBusy { wait?.heard(at: Date()) } else { wait = nil }
+            // Something cut off and still held is finished before the next thing.
+            if let line = held { pickUp(line) }
+            given = (text, Date(), 0)
             say(text)
         case .show:
             let title = (message.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -550,6 +634,7 @@ final class LiveConversation {
             answer = ""
             // The question is asked through whichever line is open, or the one about to be.
             pendingQuestion = ApprovalPhrase.spoken(tool: tool, description: described, preview: preview)
+            if let question = pendingQuestion { given = (question, Date(), 0) }
             say(pendingQuestion ?? "")
             refresh()
         case .utterance:
