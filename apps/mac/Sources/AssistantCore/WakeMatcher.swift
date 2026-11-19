@@ -22,6 +22,13 @@ public struct WakeMatcher: Sendable {
             return lead.split(separator: " ").count <= 2
         }
 
+        /// A request said in the same breath as the name ("Jarvis, check on the
+        /// build"). Nil for the name alone, or the name and one more word.
+        public var requestInTheSameBreath: String? {
+            let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.split(separator: " ").count >= 2 ? text : nil
+        }
+
         /// A short request with the name tacked on the end ("how's the build, Jarvis").
         public var endsWithName: Bool {
             after.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

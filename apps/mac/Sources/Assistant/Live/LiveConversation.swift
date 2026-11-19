@@ -53,6 +53,11 @@ final class LiveConversation {
     private var displayTimer: Timer?
     private var idleTimer: Timer?
     private var checkingForName = false
+    /// Set when the name turns up in a sentence that is still being said, for a
+    /// voice whose requests are read from the Mac's own transcription.
+    private var nameHeardAt: Date?
+    /// The longest a sentence is heard out after the name before it is taken as it stands.
+    private static let longestRequest: TimeInterval = 12
     private var userTalking = false
     private var sessionBusy = false
     private var note: String?
@@ -136,13 +141,32 @@ final class LiveConversation {
         ears.onVoice = { [weak self] speaking in self?.voice(speaking) }
         ears.onHeard = { [weak self] text in
             guard let self, self.state == .asleep, let match = self.matcher.match(text), match.leadsWithName else { return }
+            if self.readsRequestsItself {
+                // Hear the sentence out: what follows the name is the request.
+                if self.nameHeardAt == nil {
+                    self.nameHeardAt = Date()
+                    self.refresh()
+                }
+                return
+            }
             self.wake("heard its name", byVoice: true)
         }
         ears.onEnded = { [weak self] text in
             guard let self else { return }
             self.checkingForName = false
             guard self.state == .asleep else { return }
+            let named = self.nameHeardAt != nil
+            self.nameHeardAt = nil
             if let match = self.matcher.match(text), match.leadsWithName || match.endsWithName {
+                let request = self.readsRequestsItself ? match.requestInTheSameBreath : nil
+                if let request, Dismissal.matches(request) {
+                    // Told to go away while already asleep.
+                    self.refresh()
+                } else {
+                    self.wake("heard its name", byVoice: true, request: request)
+                }
+            } else if named {
+                // The name was there while they spoke and the finished words lost it.
                 self.wake("heard its name", byVoice: true)
             } else if !text.isEmpty {
                 let words = text.split(separator: " ").count
@@ -151,7 +175,10 @@ final class LiveConversation {
         }
 
         idleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkIdle() }
+            MainActor.assumeIsolated {
+                self?.checkNameHeard()
+                self?.checkIdle()
+            }
         }
 
         Task { @MainActor in
@@ -166,8 +193,24 @@ final class LiveConversation {
 
     // MARK: Waking and sleeping
 
-    private func wake(_ why: String, byVoice: Bool = false) {
+    /// The small model on this Mac is handed the words that woke it as a clipped
+    /// burst and often cannot make them out, while the Mac's own transcription
+    /// has just heard them well enough to find the name. So for that voice, a
+    /// request said along with the name is read from the transcription.
+    private var readsRequestsItself: Bool { settings.voiceEngine == "sophon" }
+
+    /// A sentence that never seems to end, in a loud room, is taken as it stands.
+    private func checkNameHeard() {
+        guard state == .asleep, let since = nameHeardAt, Date().timeIntervalSince(since) > Self.longestRequest else { return }
+        checkingForName = false
+        ears.stopSession()
+    }
+
+    /// - Parameter request: what was asked in the same breath as the name, when
+    ///   the transcription is trusted with it. It goes straight to the session.
+    private func wake(_ why: String, byVoice: Bool = false, request: String? = nil) {
         guard state == .asleep else { return }
+        nameHeardAt = nil
         Log.write("waking: \(why)")
         state = .connecting
         openedAt = Date()
@@ -192,6 +235,7 @@ final class LiveConversation {
             let queued = self.waitingToSay
             self.waitingToSay.removeAll()
             queued.forEach { self.say($0) }
+            if let request { self.take(request) }
             self.refresh()
         }
         session.onAudio = { [weak self, weak session] bytes in
@@ -250,7 +294,9 @@ final class LiveConversation {
             self.settle()
         }
         session.open()
-        ears.startStreaming(lead: byVoice) { [weak session] data in
+        // With the request already in hand, the voice model is not given the
+        // same words to answer a second time.
+        ears.startStreaming(lead: byVoice && request == nil) { [weak session] data in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { session?.sendAudio(data) }
             }
@@ -360,6 +406,18 @@ final class LiveConversation {
     }
 
     // MARK: To and from the Claude session
+
+    /// A request read from the Mac's transcription, handed over without the voice
+    /// model having to understand it.
+    private func take(_ request: String) {
+        Log.write("heard with the name: \(request)")
+        dialogue.append(.user, request)
+        logFinishedLines()
+        let id = "heard-" + UUID().uuidString.prefix(8).lowercased()
+        openHandOff = id
+        lastEngaged = Date()
+        handOver(id)
+    }
 
     private func handOver(_ id: String) {
         guard openHandOff == id else { return }
@@ -473,8 +531,14 @@ final class LiveConversation {
         var progress: Int?
         switch state {
         case .asleep:
-            phase = sessionBusy ? .thinking : .asleep
-            if sessionBusy { caption = note ?? "Working on it" }
+            if nameHeardAt != nil {
+                // Its name was said and the sentence is still going.
+                phase = .listening
+                caption = Self.listeningLabel
+            } else {
+                phase = sessionBusy ? .thinking : .asleep
+                if sessionBusy { caption = note ?? "Working on it" }
+            }
         case .connecting:
             phase = .listening
         case .awake:
