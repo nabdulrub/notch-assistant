@@ -59,7 +59,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     /// Key equivalents come from the menu bar, so without an Edit menu a text
     /// field does not paste.
-    private static func menu(name: String) -> NSMenu {
+    static func menu(name: String) -> NSMenu {
         let main = NSMenu()
         let appItem = NSMenuItem()
         let app = NSMenu()

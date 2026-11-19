@@ -19,9 +19,12 @@ public struct ChannelServer: Sendable {
     }
 
     public var assistantName: String
+    /// What the session is given as the channel's own instructions.
+    public var instructions: String
 
-    public init(assistantName: String) {
+    public init(assistantName: String, instructions: String? = nil) {
         self.assistantName = assistantName
+        self.instructions = instructions ?? Persona.instructions(name: assistantName)
     }
 
     // MARK: Claude Code -> helper
@@ -46,7 +49,7 @@ public struct ChannelServer: Sendable {
                     "tools": [String: Any](),
                 ],
                 "serverInfo": ["name": Persona.channelName, "version": "0.1.0"],
-                "instructions": Persona.instructions(name: assistantName),
+                "instructions": instructions,
             ]))
         case "ping":
             output.replies.append(result(id, [:]))
