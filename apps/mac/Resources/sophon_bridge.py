@@ -72,6 +72,22 @@ def unheard(text):
     return bool(UNHEARD.search(text.lower().replace("\u2019", "'")))
 
 
+# The model filling the air. It cannot do anything itself, so a reply of its own that opens with an apology
+# or with what it cannot do is a request it should have handed over, and "I'm listening" is it answering a
+# sound that asked nothing. A hello or a "yes, I'm here" does not open this way.
+STALLING = re.compile(
+    r"^(?:(?:oh|ah|um|uh|well|hmm|okay|ok)\b[,.!]?\s+)?"
+    r"(?:i'?m (?:so |really |very )?sorry\b|i am (?:so |really |very )?sorry\b|sorry\b|i apologi[sz]e\b"
+    r"|i can(?:no|')?t\b|i (?:am|'m) (?:not able|unable)\b|i do ?n[o']t have\b"
+    r"|i(?:'m| am) (?:still |just |here,? )?listening\b|i can hear (?:you're|you are|that you)\b)")
+
+
+def stalling(text):
+    """Whether a reply of the model's own opens as an apology, a refusal or "I'm listening"."""
+    t = re.sub(r"^(?:\s|\[[^\]]*\]|[\"'*(.,-])+", "", text.lower().replace("\u2019", "'"))
+    return bool(STALLING.match(t))
+
+
 def request_of(text):
     """What was asked for, out of 'HANDOFF: check how the release is going.'"""
     t = text[text.upper().find(HANDOFF) + len(HANDOFF):]
@@ -126,11 +142,11 @@ class JarvisBrain(Brain):
             while not st["done"] and not cancelled(): pull()
             self.sig += [("gen", i) for i in range(st["ntok"])]
             return st["clean"] or st["raw"], None
-        # A little more of it before a word is spoken: a reply that says it could not hear is dropped, and
-        # goes down as having stayed out of it.
+        # A little more of it before a word is spoken: a reply that says it could not hear, or that only
+        # fills the air, is dropped, and goes down as having stayed out of it.
         st["opened"] = True
         while not st["done"] and len(st["raw"].strip()) < UNHEARD_LEAD and not cancelled(): pull()
-        if not said and unheard(st["clean"] or st["raw"]):
+        if not said and (unheard(st["clean"] or st["raw"]) or stalling(st["clean"] or st["raw"])):
             while not st["done"] and not cancelled(): pull()
             self.sig += [("gen", i) for i in range(st["ntok"])]
             self.dropped = st["clean"] or st["raw"]
