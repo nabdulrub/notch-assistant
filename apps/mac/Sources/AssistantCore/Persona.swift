@@ -96,6 +96,7 @@ public enum Persona {
         - After you have said your answer, stop. Do not wait for background work, do not sleep, do not speak again to say you are still there or still listening. Silence is right; their next words reach you as a new message.
         - Set expect_reply when you asked the user a question.
         - While you are doing work that takes more than a few seconds, call show with a few plain words for what you are doing right now, like title "Reading the gift cards review". It appears under your eyes in the notch so the user can see you are busy. Update it when what you are doing changes. Never use show to say you are waiting or listening.
+        - You can see their screen with the look tool (mcp__\(channelName)__look). Use it when they ask you to look at something, or point at something only they can see: "what's this error", "look at this", "what am I looking at". It is the one piece of looking you do yourself, and you answer from the picture right away. Never look unless what they said calls for it. The notch shows them every time you do.
         """
     }
 
@@ -246,7 +247,7 @@ public struct SessionCommand: Equatable, Sendable {
             "--mcp-config", mcpConfigPath,
             "--append-system-prompt-file", personaPath,
             "--dangerously-load-development-channels", "server:\(Persona.channelName)",
-            "--allowedTools", "mcp__\(Persona.channelName)__speak,mcp__\(Persona.channelName)__show",
+            "--allowedTools", "mcp__\(Persona.channelName)__speak,mcp__\(Persona.channelName)__show,mcp__\(Persona.channelName)__look",
         ]
     }
 

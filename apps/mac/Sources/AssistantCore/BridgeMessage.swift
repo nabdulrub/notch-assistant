@@ -19,6 +19,10 @@ public struct BridgeMessage: Codable, Equatable, Sendable {
         case event
         /// app -> helper: the user's answer to a permission prompt.
         case permissionVerdict
+        /// helper -> app: the session asked to see the screen.
+        case look
+        /// app -> helper: the screen as a picture, or why there is none.
+        case screen
         /// herdr plugin -> app: an agent just changed state, so look now and not at the next poll.
         case nudge
     }
@@ -33,10 +37,12 @@ public struct BridgeMessage: Codable, Equatable, Sendable {
     public var allow: Bool?
     public var kind: String?
     public var meta: [String: String]?
+    /// A JPEG, base64 encoded.
+    public var image: String?
 
     public init(type: Kind, text: String? = nil, title: String? = nil, detail: String? = nil,
                 expectReply: Bool? = nil, requestId: String? = nil, tool: String? = nil,
-                allow: Bool? = nil, kind: String? = nil, meta: [String: String]? = nil) {
+                allow: Bool? = nil, kind: String? = nil, meta: [String: String]? = nil, image: String? = nil) {
         self.type = type
         self.text = text
         self.title = title
@@ -47,6 +53,7 @@ public struct BridgeMessage: Codable, Equatable, Sendable {
         self.allow = allow
         self.kind = kind
         self.meta = meta
+        self.image = image
     }
 
     public static let hello = BridgeMessage(type: .hello)
@@ -74,6 +81,21 @@ public struct BridgeMessage: Codable, Equatable, Sendable {
 
     public static func permissionVerdict(requestId: String, allow: Bool) -> BridgeMessage {
         BridgeMessage(type: .permissionVerdict, requestId: requestId, allow: allow)
+    }
+
+    /// - Parameter requestId: names the tool call to answer, and comes back
+    ///   unchanged with the picture.
+    public static func look(requestId: String) -> BridgeMessage {
+        BridgeMessage(type: .look, requestId: requestId)
+    }
+
+    public static func screen(requestId: String, jpeg: Data) -> BridgeMessage {
+        BridgeMessage(type: .screen, requestId: requestId, image: jpeg.base64EncodedString())
+    }
+
+    /// - Parameter problem: why there is no picture, written for the session to act on.
+    public static func noScreen(requestId: String, problem: String) -> BridgeMessage {
+        BridgeMessage(type: .screen, text: problem, requestId: requestId)
     }
 
     public func encoded() -> Data {
