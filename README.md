@@ -92,6 +92,7 @@ the next time it starts.
 - Say "Jarvis" and talk, or press Control Option Space.
 - Talk over it to interrupt. Say "bye" to send it back to sleep.
 - Or send it away without a word: click the notch, press the talk key again, or pick "Send to Sleep" from the eyes icon in the menu bar.
+- Ask about what is on your screen: "what's this error", "look at this". It takes one picture of the display your pointer is on, the notch says "Looking at your screen" while it does, and nothing is kept. macOS asks once for Screen Recording; it never looks unless you ask.
 - Opening the app twice by accident is fine. Only one copy ever runs.
 
 ## The herdr plugin

@@ -65,6 +65,8 @@ final class LiveConversation {
     private var userTalking = false
     private var sessionBusy = false
     private var note: String?
+    /// True while the screen is being shown to the session, and briefly after.
+    private var looking = false
     private var answer: String?
     private var answerTimer: Timer?
     private var loggedLines = 0
@@ -87,6 +89,7 @@ final class LiveConversation {
 
     func start() {
         bridge.onMessage = { [weak self] message in self?.received(message) }
+        bridge.onLook = { [weak self] requestId, answer in self?.look(requestId, answer: answer) }
         bridge.onSessionCount = { count in Log.write(count > 0 ? "session attached" : "session detached") }
         model.onDismiss = { [weak self] in self?.dismiss(how: "a click on the notch") }
         model.onApproval = { [weak self] request, allow in self?.decide(request, allow: allow, how: "click") }
@@ -491,6 +494,33 @@ final class LiveConversation {
         }
     }
 
+    private static let lookingLabel = "Looking at your screen"
+
+    /// The session asked to see the screen. The notch says so for as long as it
+    /// takes and a moment after, so a look never goes unnoticed.
+    private func look(_ requestId: String, answer: @escaping @Sendable (BridgeMessage) -> Void) {
+        Log.write("the session asked to see the screen")
+        note = Self.lookingLabel
+        looking = true
+        refresh()
+        Task { @MainActor [weak self] in
+            do {
+                let jpeg = try await ScreenEye.look()
+                Log.write("sent it the screen, \(jpeg.count / 1024) KB")
+                answer(.screen(requestId: requestId, jpeg: jpeg))
+            } catch {
+                let problem = (error as? ScreenEye.Problem) ?? .nothingToSee
+                Log.write("could not show it the screen: \(problem)")
+                answer(.noScreen(requestId: requestId, problem: problem.explanation))
+            }
+            try? await Task.sleep(for: .seconds(3))
+            guard let self else { return }
+            self.looking = false
+            if self.note == Self.lookingLabel { self.note = nil }
+            self.refresh()
+        }
+    }
+
     private func received(_ message: BridgeMessage) {
         switch message.type {
         case .speak:
@@ -527,7 +557,7 @@ final class LiveConversation {
             bridge.send(.utterance(message.text ?? "", source: "typed"))
         case .nudge:
             relay.lookNow()
-        case .hello, .event, .permissionVerdict:
+        case .hello, .event, .permissionVerdict, .look, .screen:
             break
         }
     }
@@ -624,6 +654,12 @@ final class LiveConversation {
                 phase = talking ? .listening : .followUp
                 caption = talking ? Self.listeningLabel : nil
             }
+        }
+        // A look at the screen is always said, whatever else is going on, short
+        // of the assistant's own words.
+        if looking, phase != .speaking {
+            phase = .thinking
+            caption = Self.lookingLabel
         }
         if model.phase != phase { model.phase = phase }
         if model.caption != caption { model.caption = caption }
