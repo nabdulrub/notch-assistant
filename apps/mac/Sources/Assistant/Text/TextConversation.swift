@@ -19,8 +19,12 @@ final class TextConversation {
     private var note: String?
     private var looking = false
     private var updateTimer: Timer?
+    /// Typed while no session was attached, kept until one is.
+    private var held: [String] = []
+    private var startingSession = false
 
     private static let lookingLabel = "Looking at your screen"
+    private static let startingLabel = "Starting Claude Code in herdr"
 
     init(settings: AssistantSettings, model: NotchModel, bridge: BridgeServer) {
         self.settings = settings
@@ -71,10 +75,7 @@ final class TextConversation {
         model.chat.append(.you, text, to: row)
         guard let row else {
             Log.write("typed to the session: \(text)")
-            if !bridge.send(.utterance(text, source: "typed")) {
-                Log.write("no session attached")
-                model.chat.append(.assistant, "No Claude session is attached.")
-            }
+            if !bridge.send(.utterance(text, source: "typed")) { hold(text) }
             return
         }
         Log.write("typed to \(row.label) (pane \(row.paneID)): \(text)")
@@ -83,6 +84,50 @@ final class TextConversation {
             let problem = HerdrFeed.prompt(pane: pane, text: text)
             await self?.sent(to: row, problem: problem)
         }
+    }
+
+    /// Nobody is there to hear it: the message is kept, a session is started
+    /// in herdr the way setup starts one, and it gets the message once it is up.
+    private func hold(_ text: String) {
+        Log.write("no session attached")
+        guard let herdr = SessionStarter.herdrPath else {
+            model.chat.append(.assistant, "No Claude Code session is attached, and herdr is not installed to start one in.")
+            return
+        }
+        held.append(text)
+        guard !startingSession else { return }
+        startingSession = true
+        refresh()
+        Log.write("starting a session in herdr")
+        SessionFiles.write(settings: settings)
+        let directory = (settings.workingDirectory as NSString).expandingTildeInPath
+        let arguments = Array(SessionFiles.arguments(settings: settings).dropFirst())
+        let name = settings.assistantName
+        Task { [weak self] in
+            var problem = await SessionStarter.start(herdr: herdr, name: name, directory: directory, arguments: arguments)
+            if problem == nil {
+                // Claude Code is up; its channel connects a moment after.
+                for _ in 0..<40 where (self?.bridge.sessionCount ?? 0) == 0 {
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
+                if (self?.bridge.sessionCount ?? 0) == 0 { problem = "Claude Code started in herdr but did not connect. Have a look at the \(name.lowercased()) tab." }
+            }
+            self?.sessionStarted(problem: problem)
+        }
+    }
+
+    private func sessionStarted(problem: String?) {
+        startingSession = false
+        let waiting = held
+        held = []
+        if let problem {
+            Log.write("could not start a session: \(problem)")
+            model.chat.append(.assistant, problem)
+        } else {
+            Log.write("session started; sending it \(waiting.count) held message\(waiting.count == 1 ? "" : "s")")
+            for text in waiting { bridge.send(.utterance(text, source: "typed")) }
+        }
+        refresh()
     }
 
     private func sent(to row: AgentRow, problem: HerdrFeed.PromptProblem?) {
@@ -182,7 +227,9 @@ final class TextConversation {
     }
 
     private func refresh() {
-        let working: String? = looking ? Self.lookingLabel : sessionBusy ? (note ?? "Working on it") : nil
+        let working: String? = looking ? Self.lookingLabel
+            : startingSession ? Self.startingLabel
+            : sessionBusy ? (note ?? "Working on it") : nil
         if model.working != working { model.working = working }
         // The eyes are only ever seen beside something, so they are never shut.
         let phase: Phase = working == nil ? .followUp : .thinking

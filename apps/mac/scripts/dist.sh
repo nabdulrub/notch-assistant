@@ -41,6 +41,7 @@ ln -s /Applications "$STAGE/Applications"
   echo "  - for the live voice, your own OpenAI API key that can use gpt-live-1"
   echo "  - or no key at all: pick \"On this Mac\" during setup and install the"
   echo "    open Sophon model it points you to (16 GB of memory or more)"
+  echo "  - or no voice at all: pick \"Text\" during setup. It needs neither"
   echo
   echo "Install"
   echo "  1. Drag $APP_NAME onto Applications."

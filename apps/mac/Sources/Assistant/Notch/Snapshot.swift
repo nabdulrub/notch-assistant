@@ -64,8 +64,10 @@ enum Snapshot {
     static func setup(directory: URL) throws -> [URL] {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var written: [URL] = []
-        for step in SetupModel.Step.allCases {
-            let model = SetupModel(settings: AssistantSettings(), bridge: nil)
+        let pages = SetupStep.steps(for: .voice).map { (AssistantSettings.Mode.voice, $0) }
+            + SetupStep.steps(for: .text).map { (AssistantSettings.Mode.text, $0) }
+        for (index, (mode, step)) in pages.enumerated() {
+            let model = SetupModel(settings: AssistantSettings(mode: mode), bridge: nil)
             model.step = step
             model.stop()
             let view = SetupView(model: model, frozenTime: 2.0)
@@ -79,7 +81,7 @@ enum Snapshot {
             guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw CocoaError(.fileWriteUnknown) }
             host.cacheDisplay(in: host.bounds, to: bitmap)
             guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
-            let file = directory.appendingPathComponent("setup-\(step.rawValue + 1)-\(step).png")
+            let file = directory.appendingPathComponent(String(format: "setup-%02d-\(mode)-\(step).png", index + 1))
             try png.write(to: file)
             written.append(file)
         }

@@ -46,8 +46,12 @@ chat you type in and the session's answers. A message goes to the assistant
 unless you click an agent first; then it is typed straight into that agent's
 pane. Permission requests show the command with Deny and Allow.
 
-Pick it under Settings, General, Mode. It needs no voice model, no key and no
-microphone permission.
+Setup asks "Voice or text?" first, and text skips the voice, the key and the
+microphone. Settings, General, Mode switches later. It needs no voice model, no
+key and no microphone permission.
+
+With no Claude Code session attached, the first message you send starts one in
+herdr and is delivered when it is up.
 
 The notch is left out of anything you share or record: on a call nobody sees
 which agents you have going or what they said. "Show while sharing my screen" in

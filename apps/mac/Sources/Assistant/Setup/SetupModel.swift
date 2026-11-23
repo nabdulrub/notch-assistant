@@ -5,9 +5,7 @@ import SwiftUI
 
 @MainActor
 final class SetupModel: ObservableObject {
-    enum Step: Int, CaseIterable {
-        case name, voice, microphone, session, ready
-    }
+    typealias Step = SetupStep
 
     enum KeyState: Equatable {
         case empty
@@ -26,7 +24,8 @@ final class SetupModel: ObservableObject {
         "delta", "cinder", "nuri", "juni", "flitz", "brise", "sillage", "nira", "harema", "shida", "noeul",
     ]
 
-    @Published var step: Step = .name
+    @Published var step: Step = .mode
+    @Published var mode: AssistantSettings.Mode
     @Published var name: String
     @Published var engine: String
     @Published var liveVoice: String
@@ -58,6 +57,7 @@ final class SetupModel: ObservableObject {
     init(settings: AssistantSettings, bridge: BridgeServer?) {
         self.settings = settings
         self.bridge = bridge
+        mode = settings.mode
         name = settings.assistantName
         engine = settings.voiceEngine
         liveVoice = settings.liveVoice
@@ -109,7 +109,7 @@ final class SetupModel: ObservableObject {
         if openAIState == .checking || startingSession { return .thinking }
         switch step {
         case .name, .microphone: return .listening
-        case .voice, .ready: return .followUp
+        case .mode, .voice, .ready: return .followUp
         case .session: return sessionAttached ? .followUp : .thinking
         }
     }
@@ -130,12 +130,13 @@ final class SetupModel: ObservableObject {
             case .saved, .good: return true
             case .empty: return !openAIKey.isEmpty
             }
-        case .microphone, .session, .ready:
+        case .mode, .microphone, .session, .ready:
             return true
         }
     }
 
-    var progress: Double { Double(step.rawValue + 1) / Double(Step.allCases.count) }
+    var progress: Double { step.progress(in: mode) }
+    var isFirstStep: Bool { step.previous(in: mode) == nil }
 
     func next() {
         guard canContinue else { return }
@@ -152,7 +153,7 @@ final class SetupModel: ObservableObject {
 
     private func advance() {
         save()
-        guard let following = Step(rawValue: step.rawValue + 1) else {
+        guard let following = step.next(in: mode) else {
             settings.setupDone = true
             save()
             onFinish?()
@@ -162,13 +163,14 @@ final class SetupModel: ObservableObject {
     }
 
     func back() {
-        guard let previous = Step(rawValue: step.rawValue - 1) else { return }
+        guard let previous = step.previous(in: mode) else { return }
         step = previous
     }
 
     /// Written after every step, so the session files always match the choices
     /// made so far by the time the session is started.
     private func save() {
+        settings.mode = mode
         settings.assistantName = cleanName
         settings.voiceEngine = engine
         settings.liveVoice = liveVoice

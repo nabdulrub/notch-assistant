@@ -271,3 +271,42 @@ private func agent(_ pane: String, _ name: String?, _ status: AgentSnapshot.Stat
         #expect(TextLayout.size(metrics: .floating, content: .open, roster: busy).width >= 400)
     }
 }
+
+@Suite("Setup steps")
+struct SetupStepTests {
+    @Test("voice mode is asked everything")
+    func voiceAsksEverything() {
+        #expect(SetupStep.steps(for: .voice) == [.mode, .name, .voice, .microphone, .session, .ready])
+    }
+
+    @Test("text mode is never asked for a key, a model or the microphone")
+    func textSkipsTheVoiceAndTheMicrophone() {
+        #expect(SetupStep.steps(for: .text) == [.mode, .name, .session, .ready])
+        #expect(SetupStep.name.next(in: .text) == .session)
+        #expect(SetupStep.session.previous(in: .text) == .name)
+    }
+
+    @Test("the first step has nothing before it and the last nothing after")
+    func theEnds() {
+        for mode in [AssistantSettings.Mode.voice, .text] {
+            #expect(SetupStep.mode.previous(in: mode) == nil)
+            #expect(SetupStep.ready.next(in: mode) == nil)
+        }
+    }
+
+    @Test("switching to text on a step text mode does not have still finds the way on")
+    func aStepLeftBehindByAModeChange() {
+        #expect(SetupStep.voice.next(in: .text) == .session)
+        #expect(SetupStep.microphone.previous(in: .text) == .name)
+    }
+
+    @Test("progress ends at one in both modes and only ever grows")
+    func progress() {
+        for mode in [AssistantSettings.Mode.voice, .text] {
+            let values = SetupStep.steps(for: mode).map { $0.progress(in: mode) }
+            #expect(values.last == 1)
+            #expect(values == values.sorted())
+            #expect(Set(values).count == values.count)
+        }
+    }
+}
