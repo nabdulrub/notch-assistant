@@ -35,6 +35,9 @@ protocol VoiceLine: AnyObject {
     /// Something for the voice to know without saying it now.
     func remember(_ text: String, handOff: String?)
     func setMuted(_ muted: Bool)
+    /// The audio the name was heard in, for a voice that tells its owner from
+    /// the room. 24 kHz, 16-bit, one channel.
+    func learnOwner(from pcm: Data)
     /// Stop talking now.
     func interrupt()
     func close()

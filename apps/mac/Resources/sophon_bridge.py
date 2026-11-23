@@ -28,7 +28,7 @@ with that install's own Python. JarvisBrain.reply and JarvisBrain._talk follow B
 (Copyright 2026 Adventists.ai, Apache License 2.0), changed so that a reply can be recognised as a hand-off before any
 of it is spoken, and so that given text can be spoken without the model writing it.
 """
-import argparse, asyncio, collections, json, os, re, sys, threading, time, uuid
+import argparse, asyncio, base64, collections, json, os, re, sys, threading, time, uuid
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--app", required=True, help="the folder that holds Sophon's engine.py")
@@ -37,6 +37,9 @@ ap.add_argument("--prompt", required=True, help='a JSON file with the system pro
 ap.add_argument("--port", type=int, default=8791)
 ap.add_argument("--voice", default="chelsie")
 ap.add_argument("--parent", type=int, default=0, help="exit when this process is gone")
+ap.add_argument("--speaker-model", help="WeSpeaker's voxceleb_resnet34_LM.onnx; default: models/speaker/ next to --app. Without the file, every voice is heard")
+ap.add_argument("--speaker-threshold", type=float, default=0.4, help="likeness to the owner's voice below which speech is someone else's")
+ap.add_argument("--any-voice", action="store_true", help="listen to everyone, even when the speaker model is there")
 a = ap.parse_args()
 
 sys.path.append(a.app)
@@ -44,7 +47,7 @@ import numpy as np, websockets, mlx.core as mx
 from scipy.signal import resample_poly
 from mlx_lm import stream_generate
 from mlx_lm.sample_utils import make_sampler
-from engine import Brain, Session, SR, LEAD, STREAM_S, MAX_REPLY_TOK, tag_clean, resample
+from engine import Brain, Session, SR, LEAD, STREAM_S, MAX_REPLY_TOK, OWNER_N, tag_clean, resample
 
 FR = 320                      # the engine takes 20 ms frames at 16 kHz
 RATE = 24000                  # audio on the wire, both directions
@@ -65,6 +68,17 @@ UNHEARD = re.compile(
     r"\b(?:hear|hearing|catch|make out|got that|get that|understand|understanding)\b"
     r"|\bspeak up\b|\bspeak (?:a little |a bit )?louder\b|\b(?:say|repeat) that again\b")
 UNHEARD_LEAD = 48             # characters of a reply read before it is spoken, to tell
+OWNER_MIN_S = 1.0             # less speech than this with the name in it is too little to learn a voice from
+
+
+def speech_in(x, frame=320, floor=0.012):
+    """The stretch of x (16 kHz) from its first loud 20 ms to its last, or None when too little of it is speech to learn
+    a voice from. The app sends the quiet before and after the name as well, and a voice is not learned from quiet."""
+    x = np.asarray(x, np.float32); n = len(x) // frame
+    if n == 0: return None
+    loud = np.flatnonzero(np.sqrt(np.mean(np.square(x[: n * frame].reshape(n, frame)), axis=1)) > floor)
+    if len(loud) * frame < OWNER_MIN_S * 16000: return None
+    return x[loud[0] * frame: (loud[-1] + 1) * frame]
 
 
 def unheard(text):
@@ -203,10 +217,51 @@ class JarvisBrain(Brain):
 class JarvisSession(Session):
     """One conversation that outlives its connections, so what was said before the app last hung up is still known."""
 
-    def __init__(self, brain):
+    def __init__(self, brain, speaker=None, speaker_thr=0.4):
         self.note = lambda e: None
         self.hushed = 0.0
-        super().__init__(brain, lambda x: None, log=self._log)
+        super().__init__(brain, lambda x: None, log=self._log, speaker=speaker, speaker_thr=speaker_thr)
+
+    def _speaker_worker(self):
+        """Whether the speech in progress is the owner's. Someone else's is dropped, and what it cut off is put back.
+
+        The engine takes the first voice it hears for the owner. Here that could be anyone: this conversation outlives its
+        connections, and one may open with the session speaking to a room. So the owner is only ever the voice that said the
+        name (see enrol), and until one is known every voice is heard."""
+        while True:
+            uid, audio = self.spk_q.get()
+            try:
+                e = self.spk.embed(audio)
+                if e is None: continue
+                with self.lock:
+                    if uid != self.uid or self.owner is None: continue
+                    score = float(e @ (self.owner / np.linalg.norm(self.owner))); mine = score >= self.spk_thr
+                    print(f"voice: {score:.2f}, {'the owner' if mine else 'someone else'}", flush=True)
+                    if mine:
+                        if self.owner_n < OWNER_N: self.owner = self.owner + e; self.owner_n += 1
+                    else:
+                        self.note({"type": "bystander", "score": round(score, 2)}); self._bystander()
+            except Exception as ex:
+                print(f"voice check failed: {ex!r}", flush=True)
+
+    def enrol(self, x):
+        """Learns the owner's voice from the speech the name was heard in. A voice that is not the known owner's takes
+        over: whoever calls it by name is who it listens to. Too little speech teaches nothing, and changes nothing."""
+        x = speech_in(x) if self.spk is not None else None
+        if x is None: return
+        try: e = self.spk.embed(x)
+        except Exception as ex: print(f"voice check failed: {ex!r}", flush=True); return
+        if e is None: return
+        with self.lock:
+            if self.owner is not None:
+                score = float(e @ (self.owner / np.linalg.norm(self.owner)))
+                if score >= self.spk_thr:
+                    if self.owner_n < OWNER_N: self.owner = self.owner + e; self.owner_n += 1
+                    print(f"owner's voice: the same one said the name ({score:.2f})", flush=True); return
+                print(f"owner's voice: a new one said the name ({score:.2f})", flush=True)
+            else:
+                print("owner's voice: learned", flush=True)
+            self.owner = e.copy(); self.owner_n = 1; self.bystander = False
 
     def attach(self, play, note):
         with self.lock: self.play = play; self.note = note
@@ -347,6 +402,12 @@ async def handle(ws):
                 if not isinstance(e, dict): continue
                 if e.get("type") == "say" and str(e.get("text") or "").strip(): sess.say(str(e["text"]).strip(), e.get("id"))
                 elif e.get("type") == "interrupt": sess.hush()
+                elif e.get("type") == "owner":
+                    # The speech the name was heard in, as the app sends its audio: 24 kHz, 16-bit.
+                    try: pcm = base64.b64decode(str(e.get("pcm") or ""))
+                    except ValueError: continue
+                    heard = np.frombuffer(pcm[: len(pcm) // 2 * 2], "<i2").astype(np.float32) / 32768.0
+                    sess.enrol(resample_poly(heard, 2, 3).astype(np.float32))
                 continue
             x = np.frombuffer(m[: len(m) // 2 * 2], "<i2").astype(np.float32) / 32768.0
             buf = np.concatenate([buf, resample_poly(x, 2, 3).astype(np.float32)])
@@ -377,7 +438,19 @@ def watch_parent():
 if a.parent: threading.Thread(target=watch_parent, daemon=True).start()
 print("loading the model", flush=True)
 brain = JarvisBrain(a.root, lang="en", voice=a.voice, sys_prompt=a.prompt); brain.warmup()
-sess = JarvisSession(brain)
+speaker = None
+speaker_model = a.speaker_model or os.path.join(os.path.dirname(os.path.abspath(a.app)), "models", "speaker", "voxceleb_resnet34_LM.onnx")
+if a.any_voice:
+    print("owner's voice: off, every voice is heard", flush=True)
+elif not os.path.exists(speaker_model):
+    print(f"owner's voice: off, no speaker model at {speaker_model}", flush=True)
+else:
+    try:
+        from speaker import Speaker
+        speaker = Speaker(speaker_model); print("owner's voice: on, learned from whoever says the name", flush=True)
+    except Exception as ex:
+        print(f"owner's voice: off ({ex!r})", flush=True)
+sess = JarvisSession(brain, speaker, a.speaker_threshold)
 try:
     asyncio.run(main())
 except KeyboardInterrupt:

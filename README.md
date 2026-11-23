@@ -92,6 +92,7 @@ the next time it starts.
 - Say "Jarvis" and talk, or press Control Option Space.
 - Talk over it to interrupt. Say "bye" to send it back to sleep.
 - With the voice on this Mac, a cough or a noise does not lose what it was telling you: it stops, waits to see whether you ask for something, and if you do not, picks the line back up. Click the notch to stop it completely.
+- With the voice on this Mac it can listen only to you. It learns the voice that says its name with a request, and takes anyone else, a television or a long noise for the room. This needs one more file, about 27 MB: [`voxceleb_resnet34_LM.onnx`](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM) (WeSpeaker, CC BY 4.0) in `models/speaker/` next to Sophon's `app` folder, and `onnxruntime` in Sophon's Python environment. Without them every voice is heard, as before. "Only my voice" in Settings turns it off.
 - Or send it away without a word: click the notch, press the talk key again, or pick "Send to Sleep" from the eyes icon in the menu bar.
 - Ask about what is on your screen: "what's this error", "look at this". It takes one picture of the display your pointer is on, the notch says "Looking at your screen" while it does, and nothing is kept. macOS asks once for Screen Recording; it never looks unless you ask.
 - Opening the app twice by accident is fine. Only one copy ever runs.

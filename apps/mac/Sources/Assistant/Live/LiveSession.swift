@@ -127,6 +127,9 @@ final class LiveSession: VoiceLine {
         send(["type": "session.thinking.append", "delegation_id": handOff ?? NSNull(), "content": String(text.prefix(1800))])
     }
 
+    /// The live voice goes by recognised words and has no owner to learn.
+    func learnOwner(from pcm: Data) {}
+
     func setMuted(_ muted: Bool) {
         send(["type": muted ? "session.input_audio.mute" : "session.input_audio.unmute"])
     }

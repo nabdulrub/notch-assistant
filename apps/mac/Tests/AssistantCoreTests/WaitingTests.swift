@@ -51,4 +51,10 @@ import Testing
         let persona = Persona.instructions(name: "Jarvis", voice: .wordForWord)
         #expect(persona.contains("Do not send an acknowledgement"))
     }
+
+    @Test func calledByNameItAnswersWithAFewWords() {
+        #expect(WaitingLines.greeting(pick: { _ in 0 }) == "Yeah?")
+        #expect(WaitingLines.greetings.contains(WaitingLines.greeting()))
+        #expect(WaitingLines.greetings.allSatisfy { $0.split(separator: " ").count <= 2 })
+    }
 }
