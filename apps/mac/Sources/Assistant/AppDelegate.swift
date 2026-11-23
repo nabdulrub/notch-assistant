@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var localModel: SophonServer?
     private var bridge: BridgeServer?
     private var statusItem: NSStatusItem?
+    private let updater = Updater()
 
     /// - Parameter demoText: play the demo in text mode whatever the setting is.
     init(demo: Bool, demoText: Bool = false, setup: Bool = false, settings: Bool = false) {
@@ -53,6 +54,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         self.bridge = bridge
+        updater.moment = { [weak self] in
+            UpdateMoment(mode: model.mode, phase: model.phase, chatOpen: model.isOpen, sessionWorking: model.working != nil,
+                         approvalPending: model.approval != nil, windowOpen: self?.setup != nil || self?.settingsWindow != nil)
+        }
+        updater.start()
 
         // The first time, and whenever asked, setup comes before listening.
         if forceSetup || !settings.setupDone {
@@ -215,6 +221,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let setupItem = NSMenuItem(title: "Run Setup Again\u{2026}", action: #selector(showSetup), keyEquivalent: "")
             setupItem.target = self
             menu.addItem(setupItem)
+            if Updater.isConfigured {
+                let updateItem = NSMenuItem(title: "Check for Updates\u{2026}", action: #selector(Updater.checkNow), keyEquivalent: "")
+                updateItem.target = updater
+                menu.addItem(updateItem)
+            }
         }
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit \(settings.assistantName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
