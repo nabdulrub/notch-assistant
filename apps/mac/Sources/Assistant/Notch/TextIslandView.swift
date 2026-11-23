@@ -261,6 +261,7 @@ private struct AgentList: View {
                         }
                     }
                     .scrollIndicators(.never)
+                    .softEdges()
                 }
                 if !model.showsIdle, roster.idle > 0 {
                     Button { model.showsIdle = true } label: {
@@ -370,6 +371,7 @@ private struct Thread: View {
                 }
                 .scrollIndicators(.never)
                 .defaultScrollAnchor(.bottom)
+                .softEdges()
             }
             .padding(.top, 10)
         }
@@ -424,4 +426,42 @@ private struct CappedHeight: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
+}
+
+/// What a scrolling area has out of sight, above and below.
+private struct Hidden: Equatable {
+    var above = false
+    var below = false
+}
+
+/// Rows that scroll out of a list fade into the notch instead of being cut
+/// off by its edge. An edge with nothing past it stays sharp, so the first
+/// and last rows are never dimmed for no reason.
+private struct SoftEdges: ViewModifier {
+    @State private var hidden = Hidden()
+    private let depth: CGFloat = 28
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Hidden.self) { geometry in
+                let top = geometry.contentOffset.y + geometry.contentInsets.top
+                let bottom = geometry.contentSize.height - top - geometry.containerSize.height
+                return Hidden(above: top > 1, below: bottom > 1)
+            } action: { _, now in
+                withAnimation(.easeOut(duration: 0.18)) { hidden = now }
+            }
+            .mask {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.black.opacity(hidden.above ? 0 : 1), .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: depth)
+                    Color.black
+                    LinearGradient(colors: [.black, .black.opacity(hidden.below ? 0 : 1)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: depth)
+                }
+            }
+    }
+}
+
+private extension View {
+    func softEdges() -> some View { modifier(SoftEdges()) }
 }

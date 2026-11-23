@@ -237,7 +237,8 @@ enum SessionFiles {
 
     static func write(settings: AssistantSettings) {
         let data = SessionCommand.mcpConfig(helperPath: helperPath, assistantName: settings.assistantName,
-                                            socketPath: UnixSocket.standardPath, personaPath: persona.path)
+                                            socketPath: UnixSocket.standardPath, personaPath: persona.path,
+                                            home: SettingsStore.customHome)
         try? FileManager.default.createDirectory(at: SettingsStore.standard.directory, withIntermediateDirectories: true)
         try? data.write(to: mcpConfig, options: .atomic)
         try? Data(Persona.instructions(for: settings).utf8).write(to: persona, options: .atomic)

@@ -193,8 +193,15 @@ public struct SettingsStore: Sendable {
     /// `NOTCH_ASSISTANT_HOME` points a copy at a folder of its own, so one
     /// being worked on can run beside the one in use without sharing its
     /// settings, its socket or its lock.
+    public static let homeVariable = "NOTCH_ASSISTANT_HOME"
+
+    /// The folder named by `NOTCH_ASSISTANT_HOME`, when this copy was given one.
+    public static var customHome: String? {
+        ProcessInfo.processInfo.environment[homeVariable].flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     public static var standard: SettingsStore {
-        if let home = ProcessInfo.processInfo.environment["NOTCH_ASSISTANT_HOME"], !home.isEmpty {
+        if let home = customHome {
             return SettingsStore(directory: URL(fileURLWithPath: (home as NSString).expandingTildeInPath, isDirectory: true))
         }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

@@ -310,3 +310,85 @@ struct SetupStepTests {
         }
     }
 }
+
+@Suite("What the session is given in text mode")
+struct TypedChannelTests {
+    private func call(_ text: String, typed: Bool) throws -> (said: Bool, reply: String) {
+        let request: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                      "params": ["name": "speak", "arguments": ["text": text]]]
+        let output = ChannelServer(assistantName: "Jarvis").handle(line: try JSONSerialization.data(withJSONObject: request),
+                                                                   appConnected: true, typed: typed)
+        let reply = try #require(output.replies.first.map { String(decoding: $0, as: UTF8.self) })
+        return (output.toApp.contains { $0.type == .speak }, reply)
+    }
+
+    private func words(_ count: Int) -> String { Array(repeating: "word", count: count).joined(separator: " ") }
+
+    @Test("a message too long to say is short enough to read")
+    func aTypedMessageHasRoomForAFewSentences() throws {
+        let length = ChannelServer.wordLimit + 2
+        #expect(try call(words(length), typed: false).said == false)
+        let typed = try call(words(length), typed: true)
+        #expect(typed.said)
+        #expect(typed.reply.contains("Shown in the notch"))
+        #expect(!typed.reply.contains("out loud"))
+    }
+
+    @Test("text mode still has a ceiling, and says so in its own terms")
+    func aTypedMessageCanStillBeTooLong() throws {
+        #expect(try call(words(ChannelServer.typedWordLimit), typed: true).said)
+        let over = try call(words(ChannelServer.typedWordLimit + 1), typed: true)
+        #expect(over.said == false)
+        #expect(over.reply.contains("Not shown"))
+        #expect(over.reply.contains("under \(ChannelServer.typedWordLimit) words"))
+    }
+
+    @Test("the speak tool is described as a message on screen, with its own limit")
+    func theToolIsDescribedAsText() throws {
+        func speak(typed: Bool) throws -> String {
+            let request: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": "tools/list"]
+            let output = ChannelServer(assistantName: "Jarvis").handle(line: try JSONSerialization.data(withJSONObject: request),
+                                                                       appConnected: true, typed: typed)
+            let reply = try #require(output.replies.first)
+            let object = try #require(JSONSerialization.jsonObject(with: reply) as? [String: Any])
+            let tools = try #require((object["result"] as? [String: Any])?["tools"] as? [[String: Any]])
+            #expect(tools.map { $0["name"] as? String } == ["speak", "show", "look"])
+            return try #require(tools[0]["description"] as? String)
+        }
+        let typed = try speak(typed: true)
+        #expect(typed.contains("At most \(ChannelServer.typedWordLimit) words"))
+        #expect(!typed.contains("out loud"))
+        #expect(try speak(typed: false).contains("At most \(ChannelServer.wordLimit) words"))
+    }
+
+    @Test("the instructions give the text limit")
+    func theInstructionsGiveTheLimit() {
+        let text = Persona.instructions(for: AssistantSettings(mode: .text))
+        #expect(text.contains("up to \(ChannelServer.typedWordLimit) words"))
+        #expect(!Persona.instructions(for: AssistantSettings()).contains("up to \(ChannelServer.typedWordLimit) words"))
+    }
+
+    @Test("the session may read any agent in herdr without being asked each time")
+    func herdrReadsAreAllowedUpFront() throws {
+        let json = try #require(JSONSerialization.jsonObject(with: SessionCommand.sessionSettings(helperPath: "/h")) as? [String: Any])
+        let allowed = try #require((json["permissions"] as? [String: Any])?["allow"] as? [String])
+        #expect(allowed.contains("Bash(herdr agent read:*)"))
+        #expect(allowed.contains("Bash(herdr pane read:*)"))
+        // Only commands that look: nothing that types into, starts or closes anything.
+        for rule in allowed {
+            #expect(!["prompt", "send", "start", "close", "create", "kill", "focus", "rename"].contains { rule.contains($0) }, "\(rule)")
+        }
+        #expect(json["hooks"] != nil)
+    }
+
+    @Test("a copy with its own home hands that home to its helper")
+    func theHelperSharesTheHome() throws {
+        func helper(home: String?) throws -> [String: Any] {
+            let data = SessionCommand.mcpConfig(helperPath: "/h", assistantName: "Jarvis", socketPath: "/s", home: home)
+            let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            return try #require((json["mcpServers"] as? [String: Any])?[Persona.channelName] as? [String: Any])
+        }
+        #expect(try helper(home: "/tmp/x")["env"] as? [String: String] == ["NOTCH_ASSISTANT_HOME": "/tmp/x"])
+        #expect(try helper(home: nil)["env"] == nil)
+    }
+}

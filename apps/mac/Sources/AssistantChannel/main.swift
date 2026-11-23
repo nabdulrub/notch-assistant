@@ -149,7 +149,9 @@ app.run(onMessage: { message in
 
 while let line = readLine(strippingNewline: true) {
     guard !line.isEmpty else { continue }
-    let result = server.handle(line: Data(line.utf8), appConnected: app.isConnected)
+    // Read each time: the mode can change under a session that keeps running.
+    let typed = SettingsStore.standard.load().mode == .text
+    let result = server.handle(line: Data(line.utf8), appConnected: app.isConnected, typed: typed)
     for message in result.toApp {
         guard message.type == .look, let requestId = message.requestId else {
             app.send(message)

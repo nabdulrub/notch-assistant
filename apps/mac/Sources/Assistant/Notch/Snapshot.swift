@@ -49,8 +49,9 @@ enum Snapshot {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
         host.layoutSubtreeIfNeeded()
-        // One turn of the run loop, for what is laid out only once it is in a window.
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        // A few turns of the run loop, for what is laid out only once it is in
+        // a window and for the edges of a scrolling list to settle.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
         host.layoutSubtreeIfNeeded()
         guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw CocoaError(.fileWriteUnknown) }
         host.cacheDisplay(in: host.bounds, to: bitmap)

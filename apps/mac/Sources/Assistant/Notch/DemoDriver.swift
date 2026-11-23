@@ -52,6 +52,20 @@ struct DemoStep {
             (.you, "what is vc7-impl stuck on", nil),
             (.assistant, "It wants to run the migration against QA and is asking first. The rest of the branch is green.", nil),
         ]
+        // More than the panel holds, so the list and the conversation both scroll.
+        let crowd = FleetRoster(agents: [
+            agent("p1", "vc7-impl", .blocked, "bytes-dashboard"),
+            agent("p2", "menu-import", .done, "menu-manager"),
+            agent("p3", "codex-review", .working, "storefront", kind: "codex"),
+        ] + (1...7).map { agent("w\($0)", "worker-\($0)", .working, "bytes-dashboard") },
+            workingSince: ["p3": now.addingTimeInterval(-12 * 60)])
+        let long = said + [
+            (.you, "and menu-import", nil),
+            (.assistant, "Finished. It imported 212 items across four menus and flagged nine with no price. The report is in its last message.", nil),
+            (.you, "which nine", nil),
+            (.assistant, "All nine are in Catering: the trays, the two salad bowls and the drinks pack. Popmenu has them as ask for price.", nil),
+            (.you, "leave those unpublished", nil),
+        ]
         let picked = waiting.rows.first { $0.paneID == "p3" }
         let request = ApprovalRequest(
             id: "kqmzt", tool: "Bash", summary: "\(name) wants to push the branch",
@@ -68,6 +82,8 @@ struct DemoStep {
                                      working: "Reading the gift cards review",
                                      chat: said + [(.you, "skip the snapshot tests for now", picked)])),
             DemoStep(name: "text-all-agents", phase: .followUp, seconds: 3.6, text: TextFrame(roster: waiting, isOpen: true, showsIdle: true)),
+            DemoStep(name: "text-scrolling", phase: .thinking, seconds: 3.6,
+                     text: TextFrame(roster: crowd, isOpen: true, working: "Telling menu-import", chat: long)),
             DemoStep(name: "text-approval", phase: .followUp, approval: request, seconds: 4.5, text: TextFrame(roster: waiting)),
             DemoStep(name: "text-nothing-running", phase: .followUp, seconds: 2.6, text: TextFrame(isOpen: true)),
         ]
