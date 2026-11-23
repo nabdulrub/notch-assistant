@@ -64,6 +64,19 @@ public struct Delegation: Codable, Equatable, Sendable {
 
 /// Everything the user can change. Stored as one JSON file; there is no database.
 public struct AssistantSettings: Codable, Equatable, Sendable {
+    public enum Mode: String, Codable, CaseIterable, Sendable {
+        /// It listens for its name and talks back.
+        case voice
+        /// No microphone and no sound: the agents' statuses in the notch, and a
+        /// chat that is typed.
+        case text
+    }
+
+    /// Whether it is talked to or typed to.
+    public var mode: Mode
+    /// Whether the notch is part of what a shared or recorded screen shows.
+    /// Off, nobody on a call sees which agents are running or what they say.
+    public var showWhileSharing: Bool
     /// The name it answers to and calls itself. Drives the wake word, the persona
     /// and every label in the UI.
     public var assistantName: String
@@ -106,7 +119,9 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
                 workingDirectory: String = "~/Desktop/dev", updateEvery: Double = 40,
                 voiceEngine: String = "live", liveVoice: String = "marin", liveIdle: Double = 15, onlyMyVoice: Bool = true,
                 delegation: Delegation = Delegation(), personality: String = "", customInstructions: String = "",
-                setupDone: Bool = false) {
+                setupDone: Bool = false, mode: Mode = .voice, showWhileSharing: Bool = false) {
+        self.mode = mode
+        self.showWhileSharing = showWhileSharing
         self.assistantName = assistantName
         self.wakeAliases = wakeAliases
         self.talkKey = talkKey
@@ -145,6 +160,8 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
         personality = try container.decodeIfPresent(String.self, forKey: .personality) ?? fallback.personality
         customInstructions = try container.decodeIfPresent(String.self, forKey: .customInstructions) ?? fallback.customInstructions
         setupDone = try container.decodeIfPresent(Bool.self, forKey: .setupDone) ?? fallback.setupDone
+        mode = (try? container.decodeIfPresent(Mode.self, forKey: .mode)) ?? fallback.mode
+        showWhileSharing = (try? container.decodeIfPresent(Bool.self, forKey: .showWhileSharing)) ?? fallback.showWhileSharing
     }
 
     /// Whether the app itself has to start again for a change to take hold.
@@ -153,7 +170,7 @@ public struct AssistantSettings: Codable, Equatable, Sendable {
         assistantName != other.assistantName || wakeAliases != other.wakeAliases || talkKey != other.talkKey
             || language != other.language || updateEvery != other.updateEvery || voiceEngine != other.voiceEngine
             || liveVoice != other.liveVoice || liveIdle != other.liveIdle || onlyMyVoice != other.onlyMyVoice
-            || (other.voiceEngine == "live" && personality != other.personality)
+            || (other.voiceEngine == "live" && personality != other.personality) || mode != other.mode
     }
 
     /// An empty name would make every sentence a wake word.
@@ -172,7 +189,14 @@ public struct SettingsStore: Sendable {
 
     /// The folder name is fixed so that renaming the assistant never orphans its
     /// settings.
+    ///
+    /// `NOTCH_ASSISTANT_HOME` points a copy at a folder of its own, so one
+    /// being worked on can run beside the one in use without sharing its
+    /// settings, its socket or its lock.
     public static var standard: SettingsStore {
+        if let home = ProcessInfo.processInfo.environment["NOTCH_ASSISTANT_HOME"], !home.isEmpty {
+            return SettingsStore(directory: URL(fileURLWithPath: (home as NSString).expandingTildeInPath, isDirectory: true))
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return SettingsStore(directory: base.appendingPathComponent("NotchAssistant", isDirectory: true))
     }

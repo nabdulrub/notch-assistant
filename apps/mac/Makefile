@@ -3,7 +3,7 @@ APP_NAME ?= Notch Assistant
 APP := build/$(APP_NAME).app
 BIN := $(APP)/Contents/MacOS/Assistant
 
-.PHONY: build test bundle dist demo run setup stop session log snapshot clean
+.PHONY: build test bundle dist demo demo-text run setup stop session log snapshot clean
 
 build:
 	swift build
@@ -20,6 +20,12 @@ demo: bundle
 	@pkill -x Assistant || true
 	@open -n "$(APP)" --args --demo
 	@echo "demo running, look at the notch"
+
+# The same for text mode: the tab beside the notch, an update, the open chat.
+demo-text: bundle
+	@pkill -x Assistant || true
+	@open -n "$(APP)" --args --demo --text
+	@echo "text mode demo running, look at the notch"
 
 # Launched through `open` so macOS asks for the microphone on behalf of the app,
 # not the terminal it was started from.

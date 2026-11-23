@@ -12,6 +12,8 @@ public enum Persona {
         case retold
         /// A small model on the Mac: what it is given is said word for word.
         case wordForWord
+        /// No voice at all: the user types in the notch and reads the answer there.
+        case typed
     }
 
     /// What the helper gives as the channel's own instructions. The part about
@@ -22,6 +24,20 @@ public enum Persona {
 
     public static func instructions(name: String, voice: VoiceLayer) -> String {
         compose(AssistantSettings(assistantName: name), voice: voice)
+    }
+
+    private static func typed() -> String {
+        """
+
+
+        One more thing, and it changes how the above reads. The user has you in text mode: there is no microphone and no voice. Wherever the instructions above say spoken, heard or out loud, read typed, read and shown.
+        - What the user types in the notch reaches you as the same kind="speech" message. It is exactly what they typed, so there is nothing misheard to read through.
+        - What you pass to speak is not said. It is shown as one chat message in the notch, word for word, in a panel a few lines tall. Write it to be read: two or three short sentences, plain text, no markdown, no lists, no code blocks. Names of agents, branches and files are fine as they are.
+        - Every reply still goes through speak. Text in the terminal is still lost.
+        - Keep them posted on every session they have running, not only the ones you started. This replaces the rule above about staying quiet for agents that are not yours: a message in the notch interrupts nobody, so each agent in an agents report that finished a piece of work or is stuck gets a line from you, whoever started it. Look at its latest output first.
+        - The notch has already shown them which agent finished or is waiting. Say what a status cannot: what it did, what it found, what it is asking for. Several at once go in one message, a sentence each, the one that needs them first.
+        - Still say nothing for a turn that changed nothing worth knowing, or for anything you already told them. The notch lists every agent and its status, so never read that list back.
+        """
     }
 
     private static func wordForWord(name: String) -> String {
@@ -51,7 +67,8 @@ public enum Persona {
 
     /// Everything the session is told, built from the user's settings.
     public static func instructions(for settings: AssistantSettings) -> String {
-        compose(settings, voice: settings.voiceEngine == "sophon" ? .wordForWord : .retold)
+        if settings.mode == .text { return compose(settings, voice: .typed) }
+        return compose(settings, voice: settings.voiceEngine == "sophon" ? .wordForWord : .retold)
     }
 
     /// Sent to a session that is already running when a setting changes, so the
@@ -71,6 +88,7 @@ public enum Persona {
         switch voice {
         case .retold: text += retold(name: name)
         case .wordForWord: text += wordForWord(name: name)
+        case .typed: text += typed()
         case nil: break
         }
         let own = settings.customInstructions.trimmingCharacters(in: .whitespacesAndNewlines)

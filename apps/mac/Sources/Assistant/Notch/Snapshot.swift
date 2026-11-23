@@ -10,7 +10,7 @@ enum Snapshot {
     static func run(directory: URL, name: String, metrics: NotchMetrics) throws -> [URL] {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var written: [URL] = []
-        for (position, step) in DemoStep.script(name: name).enumerated() {
+        for (position, step) in (DemoStep.script(name: name) + DemoStep.textScript(name: name)).enumerated() {
             let model = NotchModel(assistantName: name)
             model.metrics = metrics
             step.apply(to: model)
@@ -21,18 +21,41 @@ enum Snapshot {
             }
             .frame(width: NotchLayout.canvasWidth, height: NotchLayout.canvasHeight)
 
-            let renderer = ImageRenderer(content: view)
-            renderer.scale = 2
-            guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff),
-                  let png = bitmap.representation(using: .png, properties: [:]) else {
-                throw CocoaError(.fileWriteUnknown)
+            let png: Data
+            if step.text != nil {
+                // The chat scrolls and has a text field, and those only draw
+                // inside a window.
+                png = try inWindow(view, size: CGSize(width: NotchLayout.canvasWidth, height: NotchLayout.canvasHeight))
+            } else {
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 2
+                guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiff),
+                      let data = bitmap.representation(using: .png, properties: [:]) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                png = data
             }
             let file = directory.appendingPathComponent(String(format: "%02d-%@.png", position + 1, step.name))
             try png.write(to: file)
             written.append(file)
         }
         return written
+    }
+
+    /// Draws a view in a window that is never put on screen.
+    private static func inWindow(_ view: some View, size: CGSize) throws -> Data {
+        let host = NSHostingView(rootView: view)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        // One turn of the run loop, for what is laid out only once it is in a window.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        host.layoutSubtreeIfNeeded()
+        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw CocoaError(.fileWriteUnknown) }
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+        return png
     }
 
     /// The setup screens, one PNG each. These hold real text fields and menus,

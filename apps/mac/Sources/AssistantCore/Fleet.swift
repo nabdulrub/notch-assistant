@@ -11,13 +11,16 @@ public struct AgentSnapshot: Equatable, Sendable {
     public var title: String?
     public var status: Status
     public var directory: String?
+    /// Which agent it is, in herdr's word for it: "claude", "codex" and so on.
+    public var kind: String?
 
-    public init(paneID: String, name: String?, title: String?, status: Status, directory: String?) {
+    public init(paneID: String, name: String?, title: String?, status: Status, directory: String?, kind: String? = nil) {
         self.paneID = paneID
         self.name = name
         self.title = title
         self.status = status
         self.directory = directory
+        self.kind = kind
     }
 
     /// What to call it out loud: its name if it has one, else what it is working on.
@@ -43,7 +46,8 @@ public struct AgentSnapshot: Equatable, Sendable {
                 name: agent["name"] as? String,
                 title: agent["terminal_title_stripped"] as? String,
                 status: Status(rawValue: agent["agent_status"] as? String ?? "") ?? .unknown,
-                directory: agent["cwd"] as? String)
+                directory: agent["cwd"] as? String,
+                kind: agent["agent"] as? String)
         }
     }
 }
@@ -83,6 +87,8 @@ public struct FleetUpdate: Equatable, Sendable {
     public var own: AgentSnapshot.Status?
     /// The assistant's own workers that are busy right now.
     public var workers: [AgentSnapshot]
+    /// Every other agent, one line each, for the list the notch opens to.
+    public var roster = FleetRoster()
 }
 
 /// Turns successive snapshots of every agent into the counts the notch shows and
@@ -158,6 +164,7 @@ public struct FleetTracker: Sendable {
         asked = asked.filter { known[$0] != nil }
         primed = true
         let workers = others.filter { $0.isOwn && $0.status == .working }
-        return FleetUpdate(summary: summary, events: events, own: own, workers: workers)
+        let roster = FleetRoster(agents: others, workingSince: workingSince)
+        return FleetUpdate(summary: summary, events: events, own: own, workers: workers, roster: roster)
     }
 }

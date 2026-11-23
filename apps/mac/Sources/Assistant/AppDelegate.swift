@@ -5,6 +5,7 @@ import AssistantCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let demo: Bool
+    private let demoText: Bool
     private let forceSetup: Bool
     private let openSettings: Bool
     private var setup: SetupWindowController?
@@ -15,12 +16,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notch: NotchController?
     private var demoDriver: DemoDriver?
     private var conversation: LiveConversation?
+    private var textConversation: TextConversation?
     private var localModel: SophonServer?
     private var bridge: BridgeServer?
     private var statusItem: NSStatusItem?
 
-    init(demo: Bool, setup: Bool = false, settings: Bool = false) {
+    /// - Parameter demoText: play the demo in text mode whatever the setting is.
+    init(demo: Bool, demoText: Bool = false, setup: Bool = false, settings: Bool = false) {
         self.demo = demo
+        self.demoText = demoText
         forceSetup = setup
         openSettings = settings
     }
@@ -29,11 +33,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsStore.standard.load()
         let model = NotchModel(assistantName: settings.assistantName)
         self.model = model
+        model.mode = settings.mode
         notch = NotchController(model: model)
+        notch?.shownWhileSharing = settings.showWhileSharing
         installStatusItem(settings: settings)
 
         if demo {
-            let driver = DemoDriver(model: model)
+            notch?.takesKeyboard = false
+            let driver = DemoDriver(model: model, text: demoText || settings.mode == .text)
             driver.start()
             demoDriver = driver
             return
@@ -61,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         localModel?.stop()
     }
 
-    private var isConversing: Bool { conversation != nil }
+    private var isConversing: Bool { conversation != nil || textConversation != nil }
 
     @objc private func sendToSleep() {
         conversation?.dismiss(how: "the menu")
@@ -94,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// where that can be helped, and says in a sentence what became of them.
     private func apply(old: AssistantSettings, new: AssistantSettings) -> String {
         SessionFiles.write(settings: new)
+        notch?.shownWhileSharing = new.showWhileSharing
         var said = ["Saved."]
         if Persona.instructions(for: old) != Persona.instructions(for: new) {
             let reached = bridge?.send(.event(kind: "instructions", text: Persona.update(for: new))) ?? false
@@ -143,7 +151,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startConversation(_ settings: AssistantSettings, setupIfNotReady: Bool = false) {
         guard let model, let bridge, !isConversing else { return }
         model.assistantName = settings.assistantName
+        model.mode = settings.mode
         SessionFiles.write(settings: settings)
+        if settings.mode == .text {
+            // Nothing to listen with and nothing to say with: no voice model,
+            // no key and no microphone are needed.
+            let conversation = TextConversation(settings: settings, model: model, bridge: bridge)
+            conversation.start()
+            textConversation = conversation
+            return
+        }
 
         let line: () -> VoiceLine
         if settings.voiceEngine == "sophon" {
@@ -180,15 +197,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "eyes", accessibilityDescription: settings.assistantName)
         let menu = NSMenu()
-        let header = NSMenuItem(
-            title: demo ? "Demo mode" : "Say \"\(settings.assistantName)\" or press \(settings.talkKey.display)",
-            action: nil, keyEquivalent: "")
+        let how = settings.mode == .text
+            ? "Press \(settings.talkKey.display) to open the chat"
+            : "Say \"\(settings.assistantName)\" or press \(settings.talkKey.display)"
+        let header = NSMenuItem(title: demo ? "Demo mode" : how, action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         if !demo {
-            let sleepItem = NSMenuItem(title: "Send \(settings.assistantName) to Sleep", action: #selector(sendToSleep), keyEquivalent: "")
-            sleepItem.target = self
-            menu.addItem(sleepItem)
+            if settings.mode == .voice {
+                let sleepItem = NSMenuItem(title: "Send \(settings.assistantName) to Sleep", action: #selector(sendToSleep), keyEquivalent: "")
+                sleepItem.target = self
+                menu.addItem(sleepItem)
+            }
             let settingsItem = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
             settingsItem.target = self
             menu.addItem(settingsItem)

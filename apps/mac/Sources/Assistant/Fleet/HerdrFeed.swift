@@ -33,6 +33,33 @@ final class HerdrFeed: @unchecked Sendable {
         return connection.nextLine().flatMap(AgentSnapshot.list(from:))
     }
 
+    /// Types a message into one agent's pane and submits it, the way herdr's own
+    /// `agent prompt` does. Blocks until herdr answers, so not on the main thread.
+    /// - Returns: nil when it went in, else herdr's word for why it did not.
+    static func prompt(pane: String, text: String) -> PromptProblem? {
+        guard let descriptor = UnixSocket.connect(path: socketPath) else { return .notRunning }
+        let connection = LineConnection(descriptor: descriptor)
+        defer { connection.close() }
+        let request: [String: Any] = ["id": "prompt", "method": "agent.prompt", "params": ["target": pane, "text": text]]
+        guard let line = try? JSONSerialization.data(withJSONObject: request), connection.send(line),
+              let answer = connection.nextLine(),
+              let object = try? JSONSerialization.jsonObject(with: answer) as? [String: Any] else { return .notRunning }
+        guard let error = object["error"] as? [String: Any] else { return nil }
+        switch error["code"] as? String {
+        case "agent_blocked": return .blocked
+        case "agent_not_found": return .gone
+        default: return .other(error["message"] as? String ?? "herdr refused it")
+        }
+    }
+
+    enum PromptProblem: Equatable {
+        case notRunning
+        /// It is stopped on a question of its own, which a message cannot answer.
+        case blocked
+        case gone
+        case other(String)
+    }
+
     /// Asks again at once. The herdr plugin calls this on every status change, so a
     /// turn shorter than the wait between two looks is still seen.
     func lookNow() {

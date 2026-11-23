@@ -169,7 +169,8 @@ MainActor.assumeIsolated {
     let application = NSApplication.shared
     // `--setup` opens the first-run setup again, whether or not it was finished.
     // `--settings` opens the settings window as it starts.
-    let delegate = AppDelegate(demo: arguments.contains("--demo"), setup: arguments.contains("--setup"),
+    // `--demo --text` plays text mode's states instead of the voice ones.
+    let delegate = AppDelegate(demo: arguments.contains("--demo"), demoText: arguments.contains("--text"), setup: arguments.contains("--setup"),
                                settings: arguments.contains("--settings"))
     application.delegate = delegate
     application.setActivationPolicy(.accessory)

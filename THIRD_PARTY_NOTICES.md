@@ -1,7 +1,8 @@
 # Third-party notices
 
 Notch Assistant is released under the MIT License (see [LICENSE](LICENSE)). One
-file contains code adapted from another project, which keeps its own licence.
+file contains code adapted from another project, which keeps its own licence,
+and one holds icon outlines from another.
 
 ## Sophon-Realtime
 
@@ -18,3 +19,14 @@ A copy of that licence is in [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
 Notch Assistant does not include or redistribute Sophon-Realtime itself or any
 model weights. The voice on this Mac is installed separately, by the user, from
 that project, and its own licence and notices apply to it.
+
+## Agent marks
+
+`apps/mac/Sources/Assistant/Notch/AgentMark.swift` holds the outlines of the
+Claude and Codex marks, converted from the SVG files in
+[LobeHub Icons](https://github.com/lobehub/lobe-icons), which is released under
+the MIT License.
+
+The marks themselves are trademarks of Anthropic and OpenAI. They are used here
+only to say which agent a count in the notch belongs to. Notch Assistant is not
+affiliated with or endorsed by either company.

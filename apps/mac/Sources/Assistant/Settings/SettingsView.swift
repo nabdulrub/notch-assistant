@@ -86,9 +86,23 @@ struct SettingsView: View {
     // MARK: Sections
 
     private var general: some View {
-        page("General", "What it answers to, how you call it, and where it works.") {
+        let text = model.draft.mode == .text
+        return page("General", "What it answers to, how you call it, and where it works.") {
             card {
-                row("Name", "You wake it by saying this out loud.") {
+                row("Mode", text
+                    ? "No microphone and no voice. The agents' statuses in the notch, and a chat you type in."
+                    : "It listens for its name and talks back.") {
+                    ModePicker(mode: $model.draft.mode)
+                }
+                row("Show while sharing my screen", model.draft.showWhileSharing
+                    ? "On, anyone you share your screen with sees the notch too."
+                    : "Off, the notch is left out of anything you share or record.") {
+                    Toggle("Show while sharing my screen", isOn: $model.draft.showWhileSharing)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(.white.opacity(0.5))
+                }
+                row("Name", text ? "What it is called." : "You wake it by saying this out loud.") {
                     TextField("Jarvis", text: $model.draft.assistantName)
                         .textFieldStyle(.plain)
                         .font(.system(size: 14, weight: .medium))
@@ -96,7 +110,9 @@ struct SettingsView: View {
                         .frame(width: 190, height: 36)
                         .background(FieldBackground())
                 }
-                row("Talk key", "Stands in for saying the name. Press it again to send it back to sleep.") {
+                row("Talk key", text
+                    ? "Opens the chat. Press it again to close it."
+                    : "Stands in for saying the name. Press it again to send it back to sleep.") {
                     Button(model.recordingKey ? "Press a shortcut" : model.draft.talkKey.display) { model.recordKey() }
                         .buttonStyle(QuietButton())
                 }
@@ -421,5 +437,29 @@ struct FieldBackground: View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(Color.white.opacity(0.07))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+    }
+}
+
+/// Voice or text, side by side in one capsule.
+private struct ModePicker: View {
+    @Binding var mode: AssistantSettings.Mode
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(AssistantSettings.Mode.allCases, id: \.self) { option in
+                let chosen = option == mode
+                Button { mode = option } label: {
+                    Text(option.rawValue.capitalized)
+                        .font(.system(size: 13, weight: chosen ? .semibold : .medium))
+                        .foregroundStyle(chosen ? Color.black : Color.white.opacity(0.62))
+                        .frame(width: 66, height: 30)
+                        .background(chosen ? Color.white : Color.clear, in: .capsule)
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Color.white.opacity(0.1), in: .capsule)
     }
 }

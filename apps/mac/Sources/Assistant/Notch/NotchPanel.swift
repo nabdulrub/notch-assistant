@@ -26,9 +26,15 @@ enum NotchGeometry {
     }
 }
 
-/// A borderless panel above the menu bar. It never takes focus, so talking to the
-/// assistant does not pull you out of the app you are in.
+/// A borderless panel above the menu bar. It never takes focus by itself, so
+/// talking to the assistant does not pull you out of the app you are in. Text
+/// mode takes the keyboard for as long as its chat is open, and no longer.
 final class NotchPanel: NSPanel {
+    /// True while the chat is open and being typed in.
+    var takesKeyboard = false
+    /// Escape, while it has the keyboard.
+    var onCancel: (() -> Void)?
+
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
@@ -42,8 +48,12 @@ final class NotchPanel: NSPanel {
         ignoresMouseEvents = true
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { takesKeyboard }
     override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
+    }
 
     /// AppKit would otherwise push the panel down below the menu bar.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
@@ -57,11 +67,24 @@ final class NotchController {
     private var monitors: [Any] = []
     private var screenFrame: NSRect = .zero
     private var centerX: CGFloat = 0
+    private var watching: [AnyCancellable] = []
+
+    /// Whether a shared or recorded screen shows the notch. It starts out left
+    /// out of them: what the agents are up to is not for a call to see.
+    var shownWhileSharing = false {
+        didSet { panel.sharingType = shownWhileSharing ? .readOnly : .none }
+    }
+
+    /// Off for the demo, which opens the chat by itself and must not take the
+    /// keys from whatever the user is typing in.
+    var takesKeyboard = true
 
     init(model: NotchModel) {
         self.model = model
+        panel.sharingType = .none
         panel.contentView = NSHostingView(rootView: IslandView(model: model))
         place()
+        watchChat()
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -87,9 +110,61 @@ final class NotchController {
 
     /// The island as it is drawn right now, in screen coordinates.
     private var islandFrame: NSRect {
-        let size = model.size
-        return NSRect(x: centerX - size.width / 2, y: screenFrame.maxY - size.height,
+        let size = model.footprint
+        return NSRect(x: centerX + model.size.shift - size.width / 2, y: screenFrame.maxY - size.height,
                       width: size.width, height: size.height)
+    }
+
+    /// The chat is typed in, so the panel takes the keyboard while it is open
+    /// and hands it back the moment it closes. A click anywhere else, another
+    /// app coming forward, or Escape closes it.
+    private func watchChat() {
+        panel.onCancel = { [weak self] in self?.model.close() }
+        model.$isOpen.removeDuplicates().dropFirst().sink { [weak self] open in
+            guard let self else { return }
+            if open { self.takeKeyboard() } else { self.giveUpKeyboard() }
+        }.store(in: &watching)
+        observers.append(NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.close() }
+        })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.model.isOpen, !self.panel.isKeyWindow else { return }
+                self.panel.makeKey()
+            }
+        })
+        if let outside = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.close() }
+        }) {
+            monitors.append(outside)
+        }
+    }
+
+    private func takeKeyboard() {
+        guard takesKeyboard else { return }
+        panel.takesKeyboard = true
+        // Keys only arrive once the app is the active one, and that takes the
+        // system a moment: the panel is made key again when it has happened.
+        NSApp.activate()
+        panel.makeKey()
+    }
+
+    /// Typing needs the app to be the active one, and it stays that way until
+    /// it is told otherwise. So closing the chat steps the app back, which
+    /// returns the keys to whatever the user was in before. Not while one of
+    /// its own windows is open: Settings keeps the keyboard it had.
+    private func giveUpKeyboard() {
+        panel.takesKeyboard = false
+        guard panel.isKeyWindow else { return }
+        if let own = NSApp.windows.first(where: { $0 !== panel && $0.isVisible && $0.canBecomeMain }) {
+            own.makeKey()
+        } else {
+            NSApp.deactivate()
+        }
     }
 
     /// The panel is a fixed transparent canvas, larger than the island. It only
