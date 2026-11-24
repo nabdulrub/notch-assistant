@@ -33,6 +33,30 @@ you only what matters from the agents you have going.
 - **Asks before it acts.** Answer by voice or click. Risky commands take a click.
 - **Stays local.** One settings file on your Mac. No database, no account, no server of ours.
 
+## Or no voice at all
+
+Text mode turns the microphone and the voice off. The notch grows a small tab to
+its right: an icon for each kind of agent you have open in herdr, Claude, Codex
+and the rest, and beside it how many are working right now. When one finishes
+or stops to ask you something, the notch says so in a line, for every session
+you have running, not only the ones the assistant started.
+
+Press the talk key, or click the tab, and it opens into the list of agents, a
+chat you type in and the session's answers. A message goes to the assistant
+unless you click an agent first; then it is typed straight into that agent's
+pane. Permission requests show the command with Deny and Allow.
+
+Setup asks "Voice or text?" first, and text skips the voice, the key and the
+microphone. Settings, General, Mode switches later. It needs no voice model, no
+key and no microphone permission.
+
+With no Claude Code session attached, the first message you send starts one in
+herdr and is delivered when it is up.
+
+The notch is left out of anything you share or record: on a call nobody sees
+which agents you have going or what they said. "Show while sharing my screen" in
+Settings puts it back.
+
 ## Two voices, your choice
 
 <img align="right" src="apps/web/assets/setup-voice.png" width="300" alt="The setup screen asking how you want to talk">
@@ -80,8 +104,9 @@ Settings is under the eyes icon in the menu bar, or Command Comma.
   it ships with, or write your own.
 - **Instructions.** Your own rules, added after everything else it is told. Where
   the two clash, yours win.
-- **The rest.** Its name, the talk key, the session folder, the voice, and how
-  often it speaks up while agents work.
+- **The rest.** Voice or text, its name, the talk key, the session folder, the
+  voice, how often it speaks up while agents work, and whether a shared screen
+  shows the notch.
 
 A session that is already running is sent its new instructions when you save, so
 there is nothing to start again. The model the session itself runs on changes

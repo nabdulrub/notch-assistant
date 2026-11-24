@@ -29,7 +29,9 @@ public struct ChannelServer: Sendable {
 
     // MARK: Claude Code -> helper
 
-    public func handle(line: Data, appConnected: Bool) -> Output {
+    /// - Parameter typed: the user has the app in text mode, where what speak
+    ///   is given is read in the notch instead of heard.
+    public func handle(line: Data, appConnected: Bool, typed: Bool = false) -> Output {
         var output = Output()
         guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               let method = object["method"] as? String else {
@@ -54,9 +56,9 @@ public struct ChannelServer: Sendable {
         case "ping":
             output.replies.append(result(id, [:]))
         case "tools/list":
-            output.replies.append(result(id, ["tools": Self.tools]))
+            output.replies.append(result(id, ["tools": Self.tools(typed: typed)]))
         case "tools/call":
-            callTool(id: id, params: params, appConnected: appConnected, into: &output)
+            callTool(id: id, params: params, appConnected: appConnected, typed: typed, into: &output)
         case "notifications/claude/channel/permission_request":
             if let requestId = params["request_id"] as? String {
                 output.toApp.append(.permissionRequest(
@@ -74,7 +76,7 @@ public struct ChannelServer: Sendable {
         return output
     }
 
-    private func callTool(id: Any?, params: [String: Any], appConnected: Bool, into output: inout Output) {
+    private func callTool(id: Any?, params: [String: Any], appConnected: Bool, typed: Bool, into output: inout Output) {
         let name = params["name"] as? String ?? ""
         let arguments = params["arguments"] as? [String: Any] ?? [:]
         switch name {
@@ -85,16 +87,24 @@ public struct ChannelServer: Sendable {
                 return
             }
             guard appConnected else {
-                output.replies.append(toolResult(id, "Not spoken: the \(assistantName) app is not running, so the user cannot hear you.", isError: true))
+                output.replies.append(toolResult(id, typed
+                    ? "Not shown: the \(assistantName) app is not running, so the user cannot see it."
+                    : "Not spoken: the \(assistantName) app is not running, so the user cannot hear you.", isError: true))
                 return
             }
             let words = text.split(whereSeparator: { $0 == " " || $0 == "\n" }).count
-            if words > ChannelServer.wordLimit {
+            if typed, words > ChannelServer.typedWordLimit {
+                output.replies.append(toolResult(id, "Not shown: that is \(words) words, and the notch has room for a few lines. Give only the one thing they most want to know, in under \(ChannelServer.typedWordLimit) words, and stop; they will ask for the rest. Do not split it across several speak calls.", isError: true))
+                return
+            }
+            if !typed, words > ChannelServer.wordLimit {
                 output.replies.append(toolResult(id, "Not said: that is \(words) words, which is a summary, not talk. This is a conversation: say only the one thing they most want to know, in under \(ChannelServer.wordLimit) words, the way you would say it to a friend across the desk, and stop. Leave out numbers, names and steps they did not ask for; they will ask if they want them. Do not split it across several speak calls.", isError: true))
                 return
             }
             output.toApp.append(.speak(text, expectReply: arguments["expect_reply"] as? Bool ?? false))
-            output.replies.append(toolResult(id, "Said out loud; the user heard it. If that was your answer, end the turn now: no more text, no more tool calls, no waiting. Whatever they say next arrives as a new message. If it was only a quick acknowledgement, carry on with the work."))
+            output.replies.append(toolResult(id, typed
+                ? "Shown in the notch; the user can read it. If that was your answer, end the turn now: no more text, no more tool calls, no waiting. Whatever they type next arrives as a new message. If it was only a quick acknowledgement, carry on with the work."
+                : "Said out loud; the user heard it. If that was your answer, end the turn now: no more text, no more tool calls, no waiting. Whatever they say next arrives as a new message. If it was only a quick acknowledgement, carry on with the work."))
         case "show":
             guard appConnected else {
                 output.replies.append(toolResult(id, "Not shown: the \(assistantName) app is not running.", isError: true))
@@ -129,6 +139,29 @@ public struct ChannelServer: Sendable {
 
     /// A reply longer than this is a report, not talk.
     public static let wordLimit = 24
+    /// Text mode: a message is read, not heard, so it has room for two or
+    /// three sentences. Past this it no longer fits the notch.
+    public static let typedWordLimit = 60
+
+    private static let typedSpeak = "Show the user a message in the notch's chat. This is the only way they hear from you. Write it to be read: the one thing they most want to know, in two or three short sentences, and stop so they can answer or ask for more. Never a summary of everything you know. At most \(ChannelServer.typedWordLimit) words, always: there is no way around the limit. If there is more to tell, give the headline and offer the rest. Plain text: no markdown, lists, code blocks or emoji."
+
+    /// The tools as the session is told about them. In text mode speak is
+    /// described as what it then is: a message on screen.
+    static func tools(typed: Bool) -> [[String: Any]] {
+        guard typed else { return tools }
+        var all = tools
+        all[0]["description"] = typedSpeak
+        all[0]["inputSchema"] = [
+            "type": "object",
+            "properties": [
+                "text": ["type": "string", "description": "The message, as it should read."],
+                "expect_reply": ["type": "boolean", "description": "True when you asked the user a question and are waiting for the answer."],
+            ],
+            "required": ["text"],
+        ]
+        all[1]["description"] = "Put a short note under the eyes in the notch. For what you are doing right now, not for anything they should read and keep: that goes through speak."
+        return all
+    }
 
     static let tools: [[String: Any]] = [
         [

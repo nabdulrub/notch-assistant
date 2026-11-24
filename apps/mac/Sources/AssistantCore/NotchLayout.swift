@@ -32,11 +32,14 @@ public struct IslandSize: Equatable, Sendable {
     public var height: Double
     public var topRadius: Double
     public var bottomRadius: Double
+    /// How far its centre sits to the right of the notch's. Only the tab that
+    /// text mode hangs off the notch's right edge is off centre.
+    public var shift: Double = 0
 }
 
 public enum NotchLayout {
-    public static let canvasWidth: Double = 460
-    public static let canvasHeight: Double = 320
+    public static let canvasWidth: Double = 840
+    public static let canvasHeight: Double = 600
 
     static let eyesZone: Double = 46
     static let captionZone: Double = 44

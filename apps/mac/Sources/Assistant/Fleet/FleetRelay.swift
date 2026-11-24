@@ -13,6 +13,10 @@ final class FleetRelay {
     var isQuiet: (() -> Bool)?
     var send: ((BridgeMessage) -> Void)?
     var onNote: ((String) -> Void)?
+    /// Every other agent, each time they are looked at. Text mode draws them.
+    var onRoster: ((FleetRoster) -> Void)?
+    /// Blocks and finished turns, the moment they are seen.
+    var onEvents: (([FleetEvent]) -> Void)?
 
     private let feed: HerdrFeed
     private let updateEvery: Double
@@ -30,6 +34,8 @@ final class FleetRelay {
         feed.onUpdate = { [weak self] update in
             guard let self else { return }
             self.onSummary?(update.summary.isEmpty ? nil : update.summary)
+            self.onRoster?(update.roster)
+            if !update.events.isEmpty { self.onEvents?(update.events) }
             let busy = update.own == .working
             if busy != self.busy {
                 self.busy = busy

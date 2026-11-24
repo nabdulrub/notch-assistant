@@ -8,11 +8,19 @@ struct IslandView: View {
     var frozenTime: Double?
 
     var body: some View {
+        if model.mode == .text {
+            TextIslandView(model: model, frozenTime: frozenTime)
+        } else {
+            voice
+        }
+    }
+
+    private var voice: some View {
         let content = model.content
         let size = model.size
         let shape = NotchShape(topRadius: size.topRadius, bottomRadius: size.bottomRadius)
 
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             Color.clear.frame(height: model.metrics.height)
             EyesView(phase: model.phase, level: model.level, anchor: model.anchor,
                      lookingDown: model.approval != nil, frozenTime: frozenTime)
@@ -68,6 +76,8 @@ struct IslandView: View {
 
 struct ApprovalView: View {
     var request: ApprovalRequest
+    /// Whether to say how it can be answered. Text mode has one way, a click.
+    var saysHow = true
     var decide: (Bool) -> Void
 
     var body: some View {
@@ -85,9 +95,11 @@ struct ApprovalView: View {
                 .padding(.vertical, 8)
                 .background(Color.white.opacity(0.09), in: .rect(cornerRadius: 10))
             HStack(spacing: 8) {
-                Text(request.clickOnly ? "Needs a click" : "Say yes or no")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.5))
+                if saysHow {
+                    Text(request.clickOnly ? "Needs a click" : "Say yes or no")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.5))
+                }
                 Spacer(minLength: 0)
                 Button("Deny") { decide(false) }
                     .buttonStyle(IslandButtonStyle(prominent: false))

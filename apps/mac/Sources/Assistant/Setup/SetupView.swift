@@ -19,6 +19,7 @@ struct SetupView: View {
                 .padding(.top, 34)
             Group {
                 switch model.step {
+                case .mode: modeStep
                 case .name: nameStep
                 case .voice: voiceStep
                 case .microphone: microphoneStep
@@ -45,12 +46,31 @@ struct SetupView: View {
         .environment(\.colorScheme, .dark)
         .animation(.easeInOut(duration: 0.26), value: model.step)
         .animation(.easeInOut(duration: 0.2), value: model.engine)
+        .animation(.easeInOut(duration: 0.2), value: model.mode)
     }
 
     // MARK: Steps
 
+    private var modeStep: some View {
+        page("Voice or text?", "Talk to me out loud, or keep me quiet and type. You can switch later in Settings.") {
+            HStack(alignment: .top, spacing: 12) {
+                choice(model.mode == .voice, title: "Voice",
+                       detail: "Say my name and talk, and I answer out loud. Needs the microphone and a voice model: OpenAI's on your own key, or an open one that runs on this Mac.") {
+                    model.mode = .voice
+                }
+                choice(model.mode == .text, title: "Text",
+                       detail: "No microphone and no voice. The notch shows what your agents are doing and opens into a chat you type in. No key and no model to set up.") {
+                    model.mode = .text
+                }
+            }
+        }
+    }
+
     private var nameStep: some View {
-        page("What should I answer to?", "You wake me by saying this name out loud, so pick one that is easy to say.") {
+        page(model.mode == .text ? "What should I be called?" : "What should I answer to?",
+             model.mode == .text
+                ? "The name on my session in herdr, and on anything I ask you to approve."
+                : "You wake me by saying this name out loud, so pick one that is easy to say.") {
             TextField("Jarvis", text: $model.name)
                 .textFieldStyle(.plain)
                 .font(.system(size: 20, weight: .medium))
@@ -64,10 +84,14 @@ struct SetupView: View {
     private var voiceStep: some View {
         page("How should we talk?", "Either way a voice model does the talking and hands the real work to Claude Code. You can switch later.") {
             HStack(alignment: .top, spacing: 12) {
-                choice("live", title: "Live",
-                       detail: "OpenAI's voice model, on your own OpenAI API key. The best listener and the best voice. OpenAI bills you for each minute we are connected, and I hang up when we go quiet.")
-                choice("sophon", title: "On this Mac",
-                       detail: "Sophon, a small open model that runs right here. No key, no account, and nothing you say leaves the Mac. Needs a 9 GB download and about 9 GB of memory while I am open. Experimental.")
+                choice(model.engine == "live", title: "Live",
+                       detail: "OpenAI's voice model, on your own OpenAI API key. The best listener and the best voice. OpenAI bills you for each minute we are connected, and I hang up when we go quiet.") {
+                    model.engine = "live"
+                }
+                choice(model.engine == "sophon", title: "On this Mac",
+                       detail: "Sophon, a small open model that runs right here. No key, no account, and nothing you say leaves the Mac. Needs a 9 GB download and about 9 GB of memory while I am open. Experimental.") {
+                    model.engine = "sophon"
+                }
             }
             if model.engine == "live" {
                 keyField("Your OpenAI API key", saved: "Saved. Paste another key to replace it.", text: $model.openAIKey,
@@ -116,7 +140,9 @@ struct SetupView: View {
     }
 
     private var sessionStep: some View {
-        page("Connect me to Claude Code", "I am only the voice. A Claude Code session on your own subscription does the thinking and runs your agents.") {
+        page("Connect me to Claude Code",
+             (model.mode == .text ? "" : "I am only the voice. ")
+                + "A Claude Code session on your own subscription does the thinking and runs your agents.") {
             if model.sessionAttached {
                 status("checkmark.circle", "Connected to a Claude Code session.")
             } else if model.claudeInstalled == false {
@@ -159,9 +185,17 @@ struct SetupView: View {
     }
 
     private var readyStep: some View {
-        page("Say \u{201C}\(model.cleanName)\u{201D}",
-             "Then just talk. \(model.settings.talkKey.display) works too, and saying bye sends me back to sleep.") {
-            if !model.sessionAttached {
+        page(model.mode == .text ? "Press \(model.settings.talkKey.display)" : "Say \u{201C}\(model.cleanName)\u{201D}",
+             model.mode == .text
+                ? "It opens the chat, and again closes it. The tab beside the notch shows your agents the rest of the time."
+                : "Then just talk. \(model.settings.talkKey.display) works too, and saying bye sends me back to sleep.") {
+            if !model.sessionAttached, model.mode == .text, model.herdrPath != nil {
+                Text("Your first message starts a Claude Code session in herdr.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !model.sessionAttached {
                 Text("I still need a Claude Code session before I can do anything. Setup is under the eyes icon in the menu bar when you want to connect one.")
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.45))
@@ -190,11 +224,8 @@ struct SetupView: View {
 
     private var field: some View { FieldBackground() }
 
-    private func choice(_ engine: String, title: String, detail: String) -> some View {
-        let selected = model.engine == engine
-        return Button {
-            model.engine = engine
-        } label: {
+    private func choice(_ selected: Bool, title: String, detail: String, pick: @escaping () -> Void) -> some View {
+        Button(action: pick) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
@@ -276,8 +307,8 @@ struct SetupView: View {
         HStack(spacing: 16) {
             Button("Back") { model.back() }
                 .buttonStyle(QuietButton())
-                .opacity(model.step == .name ? 0 : 1)
-                .disabled(model.step == .name)
+                .opacity(model.isFirstStep ? 0 : 1)
+                .disabled(model.isFirstStep)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.1))

@@ -12,6 +12,8 @@ public enum Persona {
         case retold
         /// A small model on the Mac: what it is given is said word for word.
         case wordForWord
+        /// No voice at all: the user types in the notch and reads the answer there.
+        case typed
     }
 
     /// What the helper gives as the channel's own instructions. The part about
@@ -22,6 +24,21 @@ public enum Persona {
 
     public static func instructions(name: String, voice: VoiceLayer) -> String {
         compose(AssistantSettings(assistantName: name), voice: voice)
+    }
+
+    private static func typed() -> String {
+        """
+
+
+        One more thing, and it changes how the above reads. The user has you in text mode: there is no microphone and no voice. Wherever the instructions above say spoken, heard or out loud, read typed, read and shown.
+        - What the user types in the notch reaches you as the same kind="speech" message. It is exactly what they typed, so there is nothing misheard to read through.
+        - What you pass to speak is not said. It is shown as one chat message in the notch, word for word, in a panel a few lines tall. Write it to be read: two or three short sentences, plain text, no markdown, no lists, no code blocks. Names of agents, branches and files are fine as they are.
+        - In text mode speak takes up to \(ChannelServer.typedWordLimit) words, not the spoken limit given above. That is the ceiling, not the aim: most messages are a sentence or two.
+        - Every reply still goes through speak. Text in the terminal is still lost.
+        - Keep them posted on every session they have running, not only the ones you started. This replaces the rule above about staying quiet for agents that are not yours: a message in the notch interrupts nobody, so each agent in an agents report that finished a piece of work or is stuck gets a line from you, whoever started it. Look at its latest output first.
+        - The notch has already shown them which agent finished or is waiting. Say what a status cannot: what it did, what it found, what it is asking for. Several at once go in one message, a sentence each, the one that needs them first.
+        - Still say nothing for a turn that changed nothing worth knowing, or for anything you already told them. The notch lists every agent and its status, so never read that list back.
+        """
     }
 
     private static func wordForWord(name: String) -> String {
@@ -51,7 +68,8 @@ public enum Persona {
 
     /// Everything the session is told, built from the user's settings.
     public static func instructions(for settings: AssistantSettings) -> String {
-        compose(settings, voice: settings.voiceEngine == "sophon" ? .wordForWord : .retold)
+        if settings.mode == .text { return compose(settings, voice: .typed) }
+        return compose(settings, voice: settings.voiceEngine == "sophon" ? .wordForWord : .retold)
     }
 
     /// Sent to a session that is already running when a setting changes, so the
@@ -71,6 +89,7 @@ public enum Persona {
         switch voice {
         case .retold: text += retold(name: name)
         case .wordForWord: text += wordForWord(name: name)
+        case .typed: text += typed()
         case nil: break
         }
         let own = settings.customInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -318,24 +337,32 @@ public struct SessionCommand: Equatable, Sendable {
                     "hooks": [["type": "command", "command": quote(helperPath) + " hook pre-tool-use"]],
                 ]],
             ],
+            "permissions": ["allow": herdrReads.map { "Bash(herdr \($0):*)" }],
         ]
         return (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]))
             ?? Data("{}".utf8)
     }
 
+    /// The herdr commands that only look. The session is told to read an
+    /// agent's latest output before it says anything about it, so these are
+    /// allowed up front: left to be judged one at a time, reading a pane the
+    /// session did not start is refused, and it has nothing to report.
+    public static let herdrReads = ["agent list", "agent get", "agent read", "pane list", "pane get", "pane read", "tab list", "tab get", "workspace list"]
+
     /// The MCP config that points Claude Code at the helper inside the app bundle.
     /// - Parameter personaPath: where the helper reads the instructions it gives
     ///   as the channel's own, so they match what the user set.
-    public static func mcpConfig(helperPath: String, assistantName: String, socketPath: String, personaPath: String? = nil) -> Data {
-        let config: [String: Any] = [
-            "mcpServers": [
-                Persona.channelName: [
-                    "type": "stdio",
-                    "command": helperPath,
-                    "args": ["--name", assistantName, "--socket", socketPath] + (personaPath.map { ["--persona", $0] } ?? []),
-                ],
-            ],
+    /// - Parameter home: the folder a copy run beside the installed app keeps
+    ///   its state in, so its helper reads the same settings it does.
+    public static func mcpConfig(helperPath: String, assistantName: String, socketPath: String, personaPath: String? = nil,
+                                 home: String? = nil) -> Data {
+        var helper: [String: Any] = [
+            "type": "stdio",
+            "command": helperPath,
+            "args": ["--name", assistantName, "--socket", socketPath] + (personaPath.map { ["--persona", $0] } ?? []),
         ]
+        if let home, !home.isEmpty { helper["env"] = [SettingsStore.homeVariable: home] }
+        let config: [String: Any] = ["mcpServers": [Persona.channelName: helper]]
         return (try? JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]))
             ?? Data("{}".utf8)
     }
