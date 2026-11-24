@@ -13,15 +13,25 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="${APP_NAME:-Notch Assistant}"
 APP="$ROOT/build/$APP_NAME.app"
 DIST="$ROOT/dist"
-BUNDLE_ID="com.naderabdulrub.notchassistant"
+BUNDLE_ID="${BUNDLE_ID:-com.naderabdulrub.notchassistant}"
+REPO="${REPO:-nabdulrub/notch-assistant}"
+# A copy that is handed out looks here for the next one.
+FEED_URL="${FEED_URL:-https://github.com/$REPO/releases/latest/download/appcast.xml}"
 
 cd "$ROOT"
-CONFIG=release APP_NAME="$APP_NAME" "$ROOT/scripts/bundle.sh"
+CONFIG=release APP_NAME="$APP_NAME" BUNDLE_ID="$BUNDLE_ID" FEED_URL="$FEED_URL" "$ROOT/scripts/bundle.sh"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 DMG="$DIST/${APP_NAME// /}-$VERSION.dmg"
 
 SIGNED=no
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+  # Sparkle's own helpers are signed from the inside out, as its documentation asks.
+  SPARKLE="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$SPARKLE/XPCServices/Installer.xpc"
+  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" --preserve-metadata=entitlements "$SPARKLE/XPCServices/Downloader.xpc"
+  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$SPARKLE/Autoupdate"
+  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$SPARKLE/Updater.app"
+  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP/Contents/Frameworks/Sparkle.framework"
   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
     --identifier "$BUNDLE_ID.channel" "$APP/Contents/MacOS/assistant-channel"
   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \

@@ -3,7 +3,7 @@ APP_NAME ?= Notch Assistant
 APP := build/$(APP_NAME).app
 BIN := $(APP)/Contents/MacOS/Assistant
 
-.PHONY: build test bundle dist demo demo-text run setup stop session log snapshot clean
+.PHONY: build test bundle dist release demo demo-text run setup stop session log snapshot clean
 
 build:
 	swift build
@@ -42,6 +42,11 @@ setup: bundle
 # A disk image to give to someone else. See scripts/dist.sh for signing.
 dist:
 	APP_NAME="$(APP_NAME)" ./scripts/dist.sh
+
+# The disk image signed for the updater, and the feed that tells installed
+# copies about it. Publishes nothing: it prints the command that does.
+release:
+	APP_NAME="$(APP_NAME)" ./scripts/release.sh
 
 # The line that starts the orchestrator session. Run it in a terminal or a herdr pane.
 session:

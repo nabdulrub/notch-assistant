@@ -11,6 +11,19 @@ func value(after flag: String) -> String? {
     return arguments[index + 1]
 }
 
+/// `--appcast` prints the update feed for one release. The release script
+/// passes what Sparkle's `sign_update` printed for the disk image.
+if arguments.contains("--appcast") {
+    guard let version = value(after: "--version"), let build = value(after: "--build"), let url = value(after: "--url"),
+          let signed = value(after: "--signed").flatMap(Appcast.signature(fromSignUpdate:)) else {
+        print("usage: Assistant --appcast --version 0.2 --build 41 --url <dmg url> --signed '<what sign_update printed>' [--name <app name>]")
+        exit(2)
+    }
+    let release = AppRelease(version: version, build: build, url: url, signature: signed.signature, length: signed.length)
+    print(Appcast.xml(appName: value(after: "--name") ?? "Notch Assistant", release: release), terminator: "")
+    exit(0)
+}
+
 /// `--snapshot <dir>` writes one PNG per demo state and exits.
 if arguments.contains("--snapshot") {
     guard let path = value(after: "--snapshot") else {

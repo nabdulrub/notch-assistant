@@ -93,6 +93,13 @@ xattr -dr com.apple.quarantine "/Applications/Notch Assistant.app" && open "/App
 Setup starts by itself: a name, the voice, the microphone, and the Claude Code
 session. You can open it again from the eyes icon in the menu bar.
 
+After that it keeps itself up to date. It looks for a new version every six
+hours, downloads it in the background, checks that it was signed with this
+project's key, and starts again on it the next time nothing is going on: never
+in the middle of a conversation, an open chat, a permission request or a job
+the session is running. "Check for Updates" under the eyes icon looks now.
+Version 0.1 came before this and has to be replaced by hand once.
+
 ## Make it yours
 
 Settings is under the eyes icon in the menu bar, or Command Comma.
@@ -139,12 +146,36 @@ make run     # build, bundle and launch
 make setup   # launch with setup open
 make test
 make dist    # a disk image in apps/mac/dist to give to someone else
+make release # the disk image signed for the updater, and the feed that announces it
 make log     # the last lines of the log
 make web     # the landing page on localhost:4321
 ```
 
 `apps/mac/scripts/dist.sh` signs and notarizes when `SIGN_IDENTITY` and
 `NOTARY_PROFILE` are set; otherwise the image is signed ad hoc.
+
+### Releasing
+
+Updates are fetched and installed by [Sparkle](https://sparkle-project.org).
+Every copy reads `appcast.xml` from the latest GitHub release and only installs
+a disk image signed with the private half of `apps/mac/Resources/update-key.pub`.
+
+1. Put the new version in `apps/mac/VERSION` and merge it.
+2. On `main`, run `make release`. It builds the image, signs it with the key in
+   the login keychain, writes `dist/appcast.xml` and prints the command that
+   publishes both.
+3. Run that command. Copies in use pick the release up within six hours.
+
+The private key is in the login keychain of the Mac releases are made on, under
+the account `notch-assistant`. Keep a copy of it somewhere safe: installed
+copies never accept an update signed with another key, so a lost key means
+everyone installs the next version by hand. `apps/mac/scripts/release.sh` says
+how to export it.
+
+A build made by `make run` has no feed and never replaces itself; only the
+disk images do. To try the updater against a feed of your own, `FEED_URL`,
+`UPDATE_KEY`, `BUNDLE_ID`, `VERSION` and `BUILD_NUMBER` override what
+`scripts/bundle.sh` writes into the bundle.
 
 ## Contributing
 
